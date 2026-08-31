@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>今天看什么电影 · MoodFlix</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- 海报墙首屏 -->
+  <section id="wall" class="screen active">
+    <div class="wall-overlay"></div>
+    <div class="wall-rows" id="wallRows"></div>
+    <div class="hero">
+      <div class="hero-title-wrap">
+        <h1>今天看什么电影</h1>
+      </div>
+      <p class="tagline">回答 5 个关于此刻心情的小问题，让影单找到你。</p>
+      <div class="hero-cta-zone">
+        <img class="hero-logo" src="images/logo-silhouette.png" alt="" aria-hidden="true" />
+        <button id="startBtn" class="cta">开始测试 →</button>
+      </div>
+      <div class="hint">鼠标移入海报墙可暂停滚动</div>
+    </div>
+  </section>
+
+  <!-- 答题屏 -->
+  <section id="quiz" class="screen">
+    <div class="quiz-wrap">
+      <div class="quiz-top">
+        <button id="backBtn" class="ghost">← 返回</button>
+        <div class="progress"><div id="progressBar"></div></div>
+        <div class="q-count"><span id="qNow">1</span>/<span id="qTotal">5</span></div>
+      </div>
+      <div class="quiz-card">
+        <div class="q-cat" id="qCat"></div>
+        <h2 id="qText"></h2>
+        <div id="qOptions" class="options"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 结果屏 -->
+  <section id="result" class="screen">
+    <div class="result-wrap">
+      <div class="result-poster">
+        <img id="rPoster" alt="" />
+        <div id="rFallback" class="poster-fallback"></div>
+      </div>
+      <div class="result-info">
+        <div class="r-kicker">为你选出</div>
+        <h2 id="rTitle"></h2>
+        <div class="r-meta" id="rMeta"></div>
+        <div class="r-ratings" id="rRatings"></div>
+        <div class="r-tags" id="rTags"></div>
+        <p class="r-overview" id="rOverview"></p>
+        <div class="r-reason">
+          <span class="r-reason-label">为什么是它</span>
+          <p id="rReason"></p>
+        </div>
+        <div class="r-actions">
+          <button id="againBtn" class="cta">换一部 ↻</button>
+          <button id="retestBtn" class="ghost">重新测</button>
+          <button id="aiBtn" class="ghost" title="AI 全盘解读（当前直连 agnes-ai）">不良解读 ✦</button>
+        </div>
+        <pre id="aiPrompt" class="ai-prompt" hidden></pre>
+      </div>
+    </div>
+  </section>
+
+  <script src="data/movies.js"></script>
+  <script src="data/questions.js"></script>
+  <script src="js/match.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

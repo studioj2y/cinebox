@@ -1,0 +1,112 @@
+/* match.js - 模糊匹配逻辑
+ * 输入: answers = [{weights:{tag:w}}, ...]  (每题所选选项的标签权重)
+ * 输出: 排序后的电影 + 推荐理由 + (后续) AI 解读提示词
+ */
+(function (global) {
+  "use strict";
+
+  // 把多题答案聚合成总权重向量
+  function aggregate(answers) {
+    const W = {};
+    answers.forEach((a) => {
+      if (!a || !a.weights) return;
+      for (const t in a.weights) W[t] = (W[t] || 0) + a.weights[t];
+    });
+    return W;
+  }
+
+  // 单部电影得分: 答案权重 × 电影标签强度, 加覆盖度奖励与评分微调
+  function scoreMovie(movie, W) {
+    let s = 0;
+    let matched = 0;
+    for (const t in W) {
+      const ms = movie.tags && movie.tags[t];
+      if (ms) {
+        s += W[t] * ms;
+        matched++;
+      }
+    }
+    // 覆盖度: 命中的不同标签数, 保证"多少有些相关性"
+    const coverage = matched;
+    // 评分微调(0~10 -> 0~2), 让好片更容易浮现但不喧宾夺主
+    const ratingBonus = (movie.rating || 0) * 0.2;
+    return { score: s + coverage * 0.6 + ratingBonus, matched, raw: s };
+  }
+
+  // 推荐: 返回排序后的 topN。带轻微随机性保证多样性
+  function recommend(answers, movies, opts) {
+    opts = opts || {};
+    const poolSize = opts.poolSize || 8; // 从这个前 N 名里随机挑
+    const W = aggregate(answers);
+    const ranked = movies
+      .map((m) => ({ m, r: scoreMovie(m, W) }))
+      .sort((a, b) => b.r.score - a.r.score);
+
+    // 相关性兜底: 若最优匹配命中标签数过少, 退而求其次用高分经典片
+    const top = ranked.slice(0, poolSize);
+    return top;
+  }
+
+  // 从候选池里挑一部 (加权随机, 偏向高分但有变化)
+  function pickOne(ranked) {
+    if (!ranked.length) return null;
+    const weights = ranked.map((x, i) => Math.max(0.15, (ranked.length - i) / ranked.length));
+    const sum = weights.reduce((a, b) => a + b, 0);
+    let r = Math.random() * sum;
+    for (let i = 0; i < weights.length; i++) {
+      r -= weights[i];
+      if (r <= 0) return ranked[i];
+    }
+    return ranked[0];
+  }
+
+  function topTags(movie, W, n) {
+    return Object.keys(movie.tags || {})
+      .filter((t) => W[t])
+      .sort((a, b) => (W[b] * (movie.tags[b] || 0)) - (W[a] * (movie.tags[a] || 0)))
+      .slice(0, n || 3);
+  }
+
+  function buildReason(movie, W) {
+    const tags = topTags(movie, W, 3);
+    const labelMap = {
+      治愈: "你需要被温柔接住", 致郁: "你想认真地难过一会儿", 热血: "你渴望被点燃",
+      轻松: "你想彻底松口气", 烧脑: "你想动动脑子", 温情: "你向往人与人之间温度",
+      爽: "你等一个痛快", 浪漫: "你心里有浪漫的余温", 孤独: "你享受独处的此刻",
+      震撼: "你想要被宏大击中", 暗黑: "你接受世界的阴影", 冒险: "你想逃去远方",
+      青春: "你想回看年轻时", 成长: "你在意前行的意义", 喜剧: "你想笑",
+      悬疑: "你喜欢未知", 科幻: "你想望向未来", 历史: "你想借往事照见此刻",
+    };
+    if (!tags.length) return `它刚好和你此刻的状态同频，值得今晚留给它。`;
+    const parts = tags.map((t) => labelMap[t] || `它带着「${t}」的气质`);
+    return parts.join("，") + "。";
+  }
+
+  /* ---------- 后续接入 AI 的提示词 (stub) ----------
+   * 接法: 把 buildInterpretPrompt 的结果发给 LLM (如 agnes / gpt)，
+   * 返回一段 200~400 字的"整盘解读"，把用户的 5 个回答与这部电影串成叙事。
+   * 可放在 Vercel 的 /api/interpret 函数里，前端 fetch 调用。
+   */
+  function buildInterpretPrompt(answersText, movie) {
+    return [
+      "你是一个懂电影也懂人心的观影向导。",
+      "请根据用户刚才的 5 个回答，为一部电影写一段 200~350 字的中文'全盘解读'。",
+      "要求：1) 不剧透关键情节；2) 把用户的心境与电影气质自然勾连；3) 语气像朋友推荐，不油腻；4) 结尾给一句'今晚就它了'式的收束。",
+      "",
+      "用户的回答：",
+      answersText,
+      "",
+      "推荐影片：《" + movie.title + "》（" + (movie.year || "") + "）",
+      "类型：" + (movie.genres || []).join("、"),
+      "评分：" + ([
+        movie.tmdb_rating && "TMDB " + movie.tmdb_rating,
+        movie.douban_rating && "豆瓣 " + movie.douban_rating,
+        movie.imdb_rating && "IMDB " + movie.imdb_rating,
+      ].filter(Boolean).join("、") || "暂无评分数据"),
+      "简介：" + (movie.overview || ""),
+      "标签：" + Object.keys(movie.tags || {}).join("、"),
+    ].join("\n");
+  }
+
+  global.Match = { aggregate, scoreMovie, recommend, pickOne, buildReason, topTags, buildInterpretPrompt };
+})(window);

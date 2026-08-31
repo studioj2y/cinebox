@@ -1,0 +1,15 @@
+# 密钥 / 虚拟环境
+.env
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 开发用的源图/探查脚本（不发布）
+scripts/_logo-source.png
+scripts/_*.png
+scripts/_probe.py
