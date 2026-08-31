@@ -176,7 +176,8 @@
     const prompt = window.Match.buildInterpretPrompt(answersText, current);
     const pre = $("#aiPrompt");
     pre.hidden = false;
-    pre.textContent = "正在请 AI 解读，请稍候…";
+    pre.classList.add("loading");
+    pre.textContent = "正在探究你的内心，请稍后…";
     try {
       const resp = await fetch(AGNES.base + "/chat/completions", {
         method: "POST",
@@ -184,18 +185,27 @@
         body: JSON.stringify({
           model: AGNES.model,
           temperature: 0.8,
-          max_tokens: 600,
+          max_tokens: 500,
           messages: [
-            { role: "system", content: "你是懂电影也懂人心的观影向导。用温暖、像朋友一样的语气，写一段中文解读，不要使用任何 markdown 格式。" },
+            { role: "system", content: "你是「不良少女放映组」的观影向导，懂电影也懂人心。用温暖、像朋友一样的语气写一段中文解读，可以带一点点不羁、漫不经心的酷劲儿——但别太用力，保持真诚自然。不要使用任何 markdown 格式。" },
             { role: "user", content: prompt },
           ],
         }),
       });
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
-      const text = (data.choices && data.choices[0] && data.choices[0].message.content) || "";
-      pre.textContent = text.trim() || "（AI 返回为空）";
+      let text = (data.choices && data.choices[0] && data.choices[0].message.content) || "";
+      text = text.trim();
+      // 兜底：无论返回如何，结尾必带「今晚就它了。」
+      if (text && !/今晚就它了[。\.！!]?$/.test(text.replace(/\s+$/, ""))) {
+        text = text.replace(/\s+$/, "") + "\n\n今晚就它了。";
+      } else if (!text) {
+        text = "（AI 返回为空）";
+      }
+      pre.classList.remove("loading");
+      pre.textContent = text;
     } catch (e) {
+      pre.classList.remove("loading");
       pre.textContent = "（AI 接口暂不可用：" + e.message + "）\n\n以下是已构造的提示词，可手动发给任意 LLM：\n\n" + prompt;
     }
     pre.scrollIntoView({ behavior: "smooth" });

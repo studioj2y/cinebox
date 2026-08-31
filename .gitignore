@@ -13,3 +13,8 @@ Thumbs.db
 scripts/_logo-source.png
 scripts/_*.png
 scripts/_probe.py
+
+# 开发期产物（不发布）
+logo-preview.png
+preview-LOGO.png
+reference-branding.jpg

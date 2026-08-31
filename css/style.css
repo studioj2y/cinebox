@@ -166,12 +166,51 @@ body {
 .rt-imdb a:hover { text-decoration: underline; }
 .r-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .r-tags span { background: rgba(255,79,158,.1); border: 1px solid rgba(255,79,158,.35); color: #ffc6e0; font-size: 12px; padding: 5px 11px; border-radius: 999px; }
-.r-overview { color: #d7dae6; line-height: 1.7; font-size: 15px; margin-bottom: 20px; }
+.r-overview { color: #d7dae6; line-height: 1.85; font-size: 15.5px; margin-bottom: 20px; }
 .r-reason { background: rgba(255,210,63,.08); border-left: 3px solid var(--accent2); padding: 14px 16px; border-radius: 0 10px 10px 0; margin-bottom: 24px; }
 .r-reason-label { font-size: 12px; color: var(--accent2); letter-spacing: 1px; }
-.r-reason p { margin-top: 6px; line-height: 1.7; color: #e7e9f0; }
+.r-reason p { margin-top: 6px; line-height: 1.85; color: #e7e9f0; }
 .r-actions { display: flex; gap: 12px; flex-wrap: wrap; }
-.ai-prompt { margin-top: 18px; background: #0a0518; border: 1px solid rgba(196,176,230,.2); color: #c9b8ff; font-size: 12px; padding: 14px; border-radius: 10px; white-space: pre-wrap; max-height: 240px; overflow: auto; }
+.ai-prompt {
+  margin-top: 22px;
+  position: relative;
+  background:
+    linear-gradient(165deg, rgba(122,78,224,.12), rgba(255,79,158,.05)),
+    #140a26;
+  border: 1px solid rgba(196,176,230,.18);
+  border-radius: 16px;
+  padding: 22px 26px 24px;
+  color: #ece4ff;
+  font-size: 15.5px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  max-height: 340px;
+  overflow: auto;
+  box-shadow: 0 18px 50px rgba(0,0,0,.40), 0 0 0 1px rgba(255,255,255,.02) inset;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(196,176,230,.28) transparent;
+}
+.ai-prompt::-webkit-scrollbar { width: 8px; }
+.ai-prompt::-webkit-scrollbar-track { background: transparent; }
+.ai-prompt::-webkit-scrollbar-thumb {
+  background: rgba(196,176,230,.28);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.ai-prompt::-webkit-scrollbar-thumb:hover { background: rgba(196,176,230,.45); background-clip: padding-box; }
+.ai-prompt::before {
+  content: "✦ 不良解读";
+  display: block;
+  font-size: 12px;
+  letter-spacing: 4px;
+  font-weight: 700;
+  color: var(--accent2);
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(196,176,230,.14);
+}
+.ai-prompt.loading { color: #b9a8e6; font-style: italic; }
 
 @media (max-width: 620px) {
   .result-wrap { padding-top: 30px; }
