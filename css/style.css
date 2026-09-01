@@ -86,8 +86,10 @@ body.cursor-on .fx-cursor { opacity: 1; }
 .brand-mark b { color: var(--accent2); }
 
 /* ---------- 屏幕切换 ---------- */
-.screen { position: fixed; inset: 0; opacity: 0; pointer-events: none; transition: opacity .4s ease; z-index: 10; }
-.screen.active { opacity: 1; pointer-events: auto; }
+/* 失活屏加 visibility:hidden，彻底从命中测试移除（含 pointer-events:auto 的子按钮），
+   避免叠在下层屏之上的隐形按钮拦截点击（如结果屏的「重新测」穿透到答题屏触发重来） */
+.screen { position: fixed; inset: 0; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .4s ease, visibility .4s; z-index: 10; }
+.screen.active { opacity: 1; visibility: visible; pointer-events: auto; }
 #quiz, #result { background: radial-gradient(1200px 640px at 72% -12%, var(--accent3), var(--bg) 70%); overflow-y: auto; }
 
 /* =========================================================
@@ -270,8 +272,9 @@ body.cursor-on .fx-cursor { opacity: 1; }
 .reply-item.in { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
 .quiz-card { transition: opacity .6s ease, transform .6s ease, filter .6s ease; }
 .quiz-card.dissolve { opacity: 0; transform: translateY(-8px) scale(.97); filter: blur(6px); pointer-events: none; }
-.quiz-card.enter { animation: cardIn .62s cubic-bezier(.2,.8,.2,1) both; }
-@keyframes cardIn { from { opacity: 0; transform: translateY(26px) scale(.985); } to { opacity: 1; transform: none; } }
+.quiz-card.enter { animation: cardIn .72s cubic-bezier(.2,.8,.2,1) both; }
+/* 新问题从下方更明显地浮入（带模糊→清晰），与回复气泡上浮的视觉要素统一 */
+@keyframes cardIn { from { opacity: 0; transform: translateY(46px) scale(.97); filter: blur(7px); } to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); } }
 
 /* ---------- 总结过渡屏 ---------- */
 .summary { text-align: center; padding: 8px 2px 4px; }

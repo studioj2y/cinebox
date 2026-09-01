@@ -11,6 +11,11 @@
     result: $("#result"),
   };
   let typeTimer = null;
+  // 逐字打字时，把结果屏滚动容器钉在底部，确保用户始终看到最新浮现的内容
+  function scrollResultBottom() {
+    const r = $("#result");
+    if (r) r.scrollTop = r.scrollHeight;
+  }
   function typeText(el, text) {
     if (typeTimer) clearInterval(typeTimer);
     el.textContent = "";
@@ -21,6 +26,7 @@
       el.textContent += text.charAt(i) || "";
       i++;
       el.scrollTop = el.scrollHeight;
+      scrollResultBottom();
       if (i >= text.length) {
         clearInterval(typeTimer);
         typeTimer = null;
@@ -86,6 +92,7 @@
   let current = null;
   let quizCardEl = null;
   let replyStreamEl = null;
+  let quizLocked = false; // 防止溶解/过场期间的重复点击导致跳题
 
   function shuffle(a) {
     a = a.slice();
@@ -98,6 +105,7 @@
   function startQuiz() {
     quizQs = shuffle(QUESTIONS).slice(0, QUIZ_N);
     answers = [];
+    quizLocked = false;
     quizCardEl = $("#quizCard");
     replyStreamEl = $("#replyStream");
     replyStreamEl.innerHTML = "";
@@ -133,6 +141,8 @@
     quizCardEl.classList.add("enter");
   }
   function chooseOption(idx, opt) {
+    if (quizLocked) return; // 防重复点击/穿透，避免跳题或重来
+    quizLocked = true;
     answers.push(opt);
     // 把这句回复淡入上移到顶部回复流
     const item = document.createElement("div");
@@ -150,6 +160,7 @@
         $("#progressBar").style.width = "100%";
         renderSummary();
       }
+      quizLocked = false;
     }, 620);
   }
   function renderSummary() {
@@ -251,6 +262,8 @@
     requestAnimationFrame(() => pre.classList.add("show"));
     pre.classList.add("loading");
     pre.textContent = "正在探究你的内心，请稍后…";
+    // 强制把画面拉到最下，确保解读框（在内容下方）立即可见
+    requestAnimationFrame(() => { pre.scrollIntoView({ behavior: "smooth", block: "end" }); scrollResultBottom(); });
     try {
       const resp = await fetch(AGNES.base + "/chat/completions", {
         method: "POST",
