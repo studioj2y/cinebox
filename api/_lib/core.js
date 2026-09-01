@@ -157,7 +157,7 @@ export async function interpret({ movieId, title, answers, prompt }) {
       if (!/今晚就它了[。\.！!]?$/.test(t.replace(/\s+$/, ""))) {
         t = t.replace(/\s+$/, "") + "\n\n今晚就它了。";
       }
-      if (cache.size >= CACHE_MAX) memCache.delete(memCache.keys().next().value);
+      if (memCache.size >= CACHE_MAX) memCache.delete(memCache.keys().next().value);
       await cacheSet(key, t);
       return { text: t, cached: false, provider: name };
     } catch (e) {
