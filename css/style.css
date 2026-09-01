@@ -357,10 +357,15 @@ body.cursor-on .fx-cursor { opacity: 1; }
   border: 1px solid rgba(255,79,79,.30);
 }
 .poster-img {
-  display: block; width: 100%; max-width: 420px; height: auto;
+  display: block; width: 100%; max-width: 480px; height: auto;
   border-radius: 14px; box-shadow: 0 14px 40px rgba(0,0,0,.50);
   background: #140b1c; -webkit-user-select: none; user-select: none;
 }
+/* 关键：hidden 属性必须真正隐藏，避免结果页一进来就露出空占位卡片
+   （.poster-area 的 display:flex 会覆盖 UA 的 [hidden]{display:none}） */
+.poster-area[hidden],
+.poster-status[hidden],
+.poster-img[hidden] { display: none !important; }
 @keyframes spinDots { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 /* ---------- 总结过渡屏 ---------- */

@@ -389,49 +389,40 @@
     const m = current;
     if (!m) { alert("还没有选出电影，先完成测试吧~"); return; }
     const W = window.Match.aggregate(answers);
-    const pre = $("#aiPrompt");
-    let aiText = "";
-    if (pre && !pre.hidden && pre.textContent && !pre.textContent.includes("正在探究") && pre.textContent.trim().length > 10) {
-      aiText = pre.textContent.trim();
-    }
     const rating = (m.tmdb_rating || m.rating) ? "TMDB ★ " + (m.tmdb_rating || m.rating) : "";
     const tags = window.Match.topTags(m, W, 5).map((t) => "#" + t).join("  ");
     const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
     const qa = quizQs.map((q, i) => `
-      <div style="margin:7px 0;padding-left:10px;border-left:3px solid #ff5e9c;">
-        <div style="font:600 12px/1.3 system-ui;color:#ffffff;">${i + 1}. ${esc(q.question)}</div>
-        <div style="font:11px/1.25 system-ui;color:#ffb6d4;margin-top:2px;">▸ ${esc(answers[i] ? answers[i].text : "")}</div>
-        <div style="font:11px/1.35 system-ui;color:#d9c4e6;margin-top:2px;">“${esc(answers[i] ? answers[i].reply : "")}”</div>
+      <div style="margin:8px 0;padding-left:11px;border-left:3px solid #ff5e9c;">
+        <div style="font:600 13px/1.35 system-ui;color:#ffffff;">${i + 1}. ${esc(q.question)}</div>
+        <div style="font:12px/1.3 system-ui;color:#ffb6d4;margin-top:3px;">▸ ${esc(answers[i] ? answers[i].text : "")}</div>
+        <div style="font:12px/1.4 system-ui;color:#d9c4e6;margin-top:3px;">“${esc(answers[i] ? answers[i].reply : "")}”</div>
       </div>`).join("");
 
-    const aiBlock = aiText ? `
-      <div style="margin:6px 22px 4px;padding:12px 14px;background:rgba(255,94,156,.10);border-radius:12px;">
-        <div style="font:600 12px system-ui;color:#ff7eb6;letter-spacing:1px;">✦ 不良有话说</div>
-        <div style="font:13px/1.6 system-ui;color:#f0e2f5;white-space:pre-wrap;margin-top:6px;">${esc(aiText)}</div>
-      </div>` : "";
+    // 海报不再包含「不良有话说」AI 解读（太占空间）
 
     const root = document.createElement("div");
     root.id = "posterRoot";
-    root.style.cssText = "position:fixed;left:-10000px;top:0;width:420px;z-index:-1;background:#140b1c;color:#fff;font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;";
+    root.style.cssText = "position:fixed;left:-10000px;top:0;width:480px;z-index:-1;background:#140b1c;color:#fff;font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;";
     root.innerHTML = `
-      <div style="padding:22px 22px 12px;background:linear-gradient(180deg,#1c0f29,#140b1c);">
+      <div style="padding:24px 24px 14px;background:linear-gradient(180deg,#1c0f29,#140b1c);">
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font:700 13px/1 system-ui;letter-spacing:2px;color:#ff7eb6;">CINE<b style="color:#ffd1e6;">BOX</b></span>
-          <span style="font:12px system-ui;color:#c9a9d6;">· 不良陪你选电影</span>
+          <span style="font:700 14px/1 system-ui;letter-spacing:2px;color:#ff7eb6;">CINE<b style="color:#ffd1e6;">BOX</b></span>
+          <span style="font:13px system-ui;color:#c9a9d6;">· 不良陪你选电影</span>
         </div>
-        <div style="margin-top:12px;font:600 17px/1.3 system-ui;color:#ffffff;">今晚为你选出</div>
+        <div style="margin-top:13px;font:600 19px/1.3 system-ui;color:#ffffff;">今晚为你选出</div>
       </div>
-      <div style="padding:4px 22px 8px;">${qa}</div>
-      ${aiBlock}
-      <div style="display:flex;padding:14px 22px 4px;background:linear-gradient(180deg,#180d24,#140b1c);">
-        <img class="poster-cap" src="${esc(m.poster)}" crossorigin="anonymous" style="width:140px;height:202px;object-fit:cover;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.5);flex:0 0 auto;background:#2a1838;" />
-        <div style="flex:1;min-width:0;margin-left:14px;">
-          <div style="font:700 16px/1.3 system-ui;color:#ffffff;">${esc(m.title)}</div>
-          <div style="font:12px system-ui;color:#c9a9d6;margin-top:5px;">${esc([m.year, (m.genres || []).join("/")].filter(Boolean).join("  ·  "))}</div>
-          ${rating ? `<div style="font:12px system-ui;color:#ffd1a8;margin-top:4px;">${esc(rating)}</div>` : ""}
-          ${tags ? `<div style="font:12px system-ui;color:#b9e3ff;margin-top:5px;">${esc(tags)}</div>` : ""}
-          <div style="font:12px/1.55 system-ui;color:#d9c4e6;margin-top:7px;">${esc(window.Match.buildReason(m, W))}</div>
+      <div style="padding:6px 24px 10px;">${qa}</div>
+      <div style="display:flex;padding:16px 24px 6px;background:linear-gradient(180deg,#180d24,#140b1c);">
+        <img class="poster-cap" src="${esc(m.poster)}" crossorigin="anonymous" style="width:162px;height:234px;object-fit:cover;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.5);flex:0 0 auto;background:#2a1838;" />
+        <div style="flex:1;min-width:0;margin-left:16px;">
+          <div style="font:700 18px/1.3 system-ui;color:#ffffff;">${esc(m.title)}</div>
+          <div style="font:13px system-ui;color:#c9a9d6;margin-top:6px;">${esc([m.year, (m.genres || []).join("/")].filter(Boolean).join("  ·  "))}</div>
+          ${rating ? `<div style="font:13px system-ui;color:#ffd1a8;margin-top:5px;">${esc(rating)}</div>` : ""}
+          ${tags ? `<div style="font:13px system-ui;color:#b9e3ff;margin-top:6px;">${esc(tags)}</div>` : ""}
+          <div style="font:600 13px/1.4 system-ui;color:#ff7eb6;margin-top:11px;letter-spacing:1px;">不良推荐：<br/>为什么是它</div>
+          <div style="font:13px/1.6 system-ui;color:#d9c4e6;margin-top:5px;">${esc(window.Match.buildReason(m, W))}</div>
         </div>
       </div>
       <div style="display:flex;justify-content:center;padding:18px 22px 6px;">
@@ -474,7 +465,7 @@
     Promise.all(imgs.map(loadImg)).then(() => {
       if (cap && !cap.naturalWidth) {
         const fb = document.createElement("div");
-        fb.style.cssText = "width:140px;height:202px;border-radius:10px;background:#2a1838;display:flex;align-items:center;justify-content:center;text-align:center;font:600 13px system-ui;color:#d9c4e6;padding:8px;box-sizing:border-box;flex:0 0 auto;";
+        fb.style.cssText = "width:162px;height:234px;border-radius:12px;background:#2a1838;display:flex;align-items:center;justify-content:center;text-align:center;font:600 14px system-ui;color:#d9c4e6;padding:10px;box-sizing:border-box;flex:0 0 auto;";
         fb.textContent = m.title || "";
         cap.replaceWith(fb);
       }
