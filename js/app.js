@@ -16,7 +16,7 @@
     const r = $("#result");
     if (r) r.scrollTop = r.scrollHeight;
   }
-  function typeText(el, text) {
+  function typeText(el, text, onDone) {
     if (typeTimer) clearInterval(typeTimer);
     el.textContent = "";
     el.classList.remove("loading");
@@ -31,6 +31,7 @@
         clearInterval(typeTimer);
         typeTimer = null;
         el.classList.remove("typing");
+        if (typeof onDone === "function") onDone();
       }
     }, 28);
   }
@@ -225,6 +226,11 @@
     const pre = $("#aiPrompt");
     pre.classList.remove("show");
     pre.hidden = true;
+    // 切到新电影时，重置二维码与打字计时器，避免旧二维码残留
+    if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
+    pre.classList.remove("typing", "loading");
+    const qrCta = $("#qrCta");
+    if (qrCta) { qrCta.classList.remove("show"); qrCta.hidden = true; }
   }
 
   /* ---------------- 事件 ---------------- */
@@ -259,6 +265,10 @@
     const answersText = quizQs.map((q, i) => `${i + 1}. ${q.question} → ${answers[i] ? answers[i].text : ""}`).join("\n");
     const prompt = window.Match.buildInterpretPrompt(answersText, current);
     const pre = $("#aiPrompt");
+    const qrCta = $("#qrCta");
+    // 每次重新点击：先隐藏二维码，等新解读完成后再浮现
+    qrCta.classList.remove("show");
+    qrCta.hidden = true;
     pre.hidden = false;
     if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
     pre.classList.remove("typing");
@@ -267,6 +277,18 @@
     pre.textContent = "正在探究你的内心，请稍后…";
     // 强制把画面拉到最下，确保解读框（在内容下方）立即可见
     requestAnimationFrame(() => { pre.scrollIntoView({ behavior: "smooth", block: "end" }); scrollResultBottom(); });
+
+    // 解读完成（含空态）后浮现二维码，并把窗口钉到底
+    function revealQR() {
+      qrCta.hidden = false;
+      requestAnimationFrame(() => {
+        qrCta.classList.add("show");
+        requestAnimationFrame(() => {
+          qrCta.scrollIntoView({ behavior: "smooth", block: "end" });
+          scrollResultBottom();
+        });
+      });
+    }
 
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const MIN_LEN = 18; // 低于此长度视为被截断/异常短，触发重试
@@ -317,14 +339,15 @@
       pre.classList.remove("loading", "typing");
       pre.textContent = "心灵太封闭了，深呼吸，我再看一次。\n（点「✦ 不良有话说」再试一回）";
       aiLoading = false;
+      revealQR();
       return;
     }
     // 兜底：无论返回如何，结尾必带「今晚就它了。」
     if (!/今晚就它了[。\.！!]?$/.test(text.replace(/\s+$/, ""))) {
       text = text.replace(/\s+$/, "") + "\n\n今晚就它了。";
     }
-    // 逐字打字机呈现（打字过程中每 tick 钉底，确保最新字可见）
-    typeText(pre, text);
+    // 逐字打字机呈现（打字过程中每 tick 钉底，确保最新字可见；打完后浮现二维码）
+    typeText(pre, text, revealQR);
     aiLoading = false;
   };
 

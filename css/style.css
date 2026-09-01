@@ -276,6 +276,36 @@ body.cursor-on .fx-cursor { opacity: 1; }
 /* 新问题从屏幕底部、由外向内上浮（带模糊→清晰），与回复气泡上浮的视觉要素统一 */
 @keyframes cardIn { from { opacity: 0; transform: translateY(74vh) scale(.94); filter: blur(13px); } to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); } }
 
+/* ---------- 二维码关注卡（解读完成后显示） ---------- */
+.qr-cta {
+  margin-top: 22px; padding: 22px 22px 20px;
+  background: linear-gradient(165deg, rgba(122,78,224,.10), rgba(255,79,158,.06)), #140a26;
+  border: 1px solid rgba(196,176,230,.18); border-radius: 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.40), 0 0 0 1px rgba(255,255,255,.02) inset;
+  opacity: 0; transform: translateY(14px);
+  transition: opacity .75s ease, transform .75s cubic-bezier(.2,.8,.2,1);
+}
+.qr-cta.show { opacity: 1; transform: translateY(0); }
+.qr-text {
+  color: #ece4ff; font-size: 15px; line-height: 1.7; letter-spacing: .5px; text-align: center;
+}
+.qr-hl { color: var(--accent); font-weight: 700; }
+.qr-img-wrap {
+  position: relative; padding: 6px;
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(255,79,158,.25), 0 12px 36px rgba(255,79,158,.20), 0 0 60px rgba(255,79,158,.15);
+}
+.qr-img-wrap::after {
+  content: ""; position: absolute; inset: -8px; border-radius: 18px; pointer-events: none;
+  background: radial-gradient(60% 50% at 50% 50%, rgba(255,79,158,.18), rgba(255,79,158,0) 70%);
+  filter: blur(8px);
+}
+.qr-img { display: block; width: 168px; height: 168px; object-fit: contain; border-radius: 6px; }
+@media (max-width: 620px) {
+  .qr-img { width: 150px; height: 150px; }
+}
+
 /* ---------- 总结过渡屏 ---------- */
 .summary { text-align: center; padding: 8px 2px 4px; }
 .summary-kicker { color: var(--accent2); letter-spacing: 3px; font-size: 13px; margin-bottom: 16px; }
