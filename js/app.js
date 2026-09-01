@@ -242,6 +242,7 @@
     const fb = $("#rFallback");
     if (m.poster) {
       img.src = m.poster;
+      img.decoding = "async";
       img.style.display = "block";
       fb.classList.remove("show");
       img.onerror = () => { img.style.display = "none"; fb.classList.add("show"); fb.innerHTML = `<div class="t">${m.title}</div><div class="y">${m.year || ""}</div>`; };
@@ -286,16 +287,11 @@
     else $("#rRatings").innerHTML = "";
   }
 
-  /* AI 全盘解读：直接调用 agnes-ai（暂用通用 key；生产建议走服务端代理避免泄露） */
-  const AGNES = {
-    base: "https://apihub.agnes-ai.com/v1",
-    key: "sk-0A9xpNX1MgK5hqMWZZcUGYRfYMiW1bapWk7j3RRDQQgKXwSp",
-    model: "agnes-2.5-flash",
-  };
+  /* AI 全盘解读：改为调用本站 /api/interpret（Vercel Serverless 代理）
+     多 key 轮转 + 多提供方故障转移 + 缓存 都在服务端完成，前端不再持有任何 key */
   $("#aiBtn").onclick = async () => {
     if (aiLoading) return; // 防重复点击/并发，避免重复请求
     aiLoading = true;
-    const W = window.Match.aggregate(answers);
     const answersText = quizQs.map((q, i) => `${i + 1}. ${q.question} → ${answers[i] ? answers[i].text : ""}`).join("\n");
     const prompt = window.Match.buildInterpretPrompt(answersText, current);
     const pre = $("#aiPrompt");
@@ -325,45 +321,36 @@
     }
 
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const MIN_LEN = 18; // 低于此长度视为被截断/异常短，触发重试
     let text = "";
     let lastErr = "";
-    const MAX = 3;
+    const MAX = 2; // 服务端已做 key 轮转+提供方故障转移，这里仅作网络层兜底
     for (let attempt = 1; attempt <= MAX; attempt++) {
       try {
         const ctrl = new AbortController();
         const to = setTimeout(() => ctrl.abort(), 30000); // 30s 超时，避免悬挂
-        const resp = await fetch(AGNES.base + "/chat/completions", {
+        const resp = await fetch("/api/interpret", {
           method: "POST",
           signal: ctrl.signal,
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + AGNES.key },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: AGNES.model,
-            temperature: 0.8,
-            max_tokens: 900, // 调大，避免较长解读被服务端截断
-            messages: [
-              { role: "system", content: "你是「不良少女放映组」的观影向导，懂电影也懂人心。用温暖、像朋友一样的语气写一段中文解读，可以带一点点不羁、漫不经心的酷劲儿——但别太用力，保持真诚自然。不要使用任何 markdown 格式。" },
-              { role: "user", content: prompt },
-            ],
+            movieId: current.id,
+            title: current.title,
+            answers: quizQs.map((q, i) => ({ question: q.question, text: answers[i] ? answers[i].text : "" })),
+            prompt: prompt,
           }),
         });
         clearTimeout(to);
-        if (!resp.ok) throw new Error("HTTP " + resp.status);
-        let data;
-        try { data = await resp.json(); }
-        catch (e) { throw new Error("返回数据解析失败（疑似被截断）"); }
-        let t = (data.choices && data.choices[0] && data.choices[0].message.content) || "";
-        t = t.trim();
-        // 疑似截断 / 异常短：视为不稳定，重试
-        if (t.length < MIN_LEN) {
-          lastErr = "内容过短（疑似截断）";
-          if (attempt < MAX) { pre.textContent = "信号有点飘，我再探一次…"; await sleep(1000); continue; }
-          t = ""; // 用尽重试仍过短 → 当作空处理
+        if (!resp.ok) {
+          let msg = "HTTP " + resp.status;
+          try { const j = await resp.json(); if (j && j.error) msg = j.error; } catch (e) {}
+          throw new Error(msg);
         }
-        text = t;
+        const data = await resp.json();
+        if (!data || !data.text || !data.text.trim()) throw new Error("返回为空");
+        text = data.text.trim();
         break;
       } catch (e) {
-        lastErr = e.name === "AbortError" ? "请求超时" : e.message;
+        lastErr = e.message;
         if (attempt < MAX) { pre.textContent = "网络打了个嗝，重新连一下…"; await sleep(1200); continue; }
       }
     }
@@ -376,7 +363,7 @@
       revealQR();
       return;
     }
-    // 兜底：无论返回如何，结尾必带「今晚就它了。」
+    // 兜底：无论返回如何，结尾必带「今晚就它了。」（服务端已确保，这里双保险）
     if (!/今晚就它了[。\.！!]?$/.test(text.replace(/\s+$/, ""))) {
       text = text.replace(/\s+$/, "") + "\n\n今晚就它了。";
     }

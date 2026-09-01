@@ -1,0 +1,10 @@
+{
+  "name": "cinebox",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "不良陪你选电影 / CINEBOX — 静态问答站点 + Vercel Serverless 代理",
+  "scripts": {
+    "dev": "node dev-server.mjs"
+  }
+}

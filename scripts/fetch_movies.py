@@ -159,7 +159,7 @@ def fetch_pages(endpoint, pages=10):
     return out
 
 def download_poster(poster_path, mid):
-    dest = IMG_DIR / f"{mid}.jpg"
+    dest = IMG_DIR / f"{mid}.webp"
     if dest.exists():
         return str(dest.relative_to(ROOT)).replace("\\", "/")
     url = f"{IMG_BASE}{poster_path}"
@@ -175,7 +175,7 @@ def download_poster(poster_path, mid):
                 h = int(img.height * 500 / img.width)
                 img = img.resize((500, h))
             buf = BytesIO()
-            img.save(buf, "JPEG", quality=70, optimize=True)
+            img.save(buf, "WEBP", quality=82, method=4)
             dest.write_bytes(buf.getvalue())
         except Exception:
             dest.write_bytes(raw)
