@@ -7,11 +7,19 @@
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+  <!-- 全局视觉层 -->
+  <div class="fx fx-aurora" aria-hidden="true"></div>
+  <div class="fx fx-grain" aria-hidden="true"></div>
+  <div class="fx fx-vignette" aria-hidden="true"></div>
+  <div class="fx fx-cursor" id="fxCursor" aria-hidden="true"></div>
+  <div class="brand-mark">CINE<b>BOX</b></div>
+
   <!-- 海报墙首屏 -->
   <section id="wall" class="screen active">
     <div class="wall-overlay"></div>
     <div class="wall-rows" id="wallRows"></div>
     <div class="hero">
+      <div class="hero-step"><span class="dot"></span>STEP 01 · 测一测今晚的你</div>
       <div class="hero-title-wrap">
         <h1>今晚看什么电影</h1>
       </div>
@@ -42,6 +50,10 @@
 
   <!-- 结果屏 -->
   <section id="result" class="screen">
+    <div class="marquee"><div class="marquee-track">
+      <span>NOW SHOWING · <b>今晚的片</b></span><span>不良少女放映组</span><span>CINEBOX</span><span>把今晚交给一部电影</span>
+      <span>NOW SHOWING · <b>今晚的片</b></span><span>不良少女放映组</span><span>CINEBOX</span><span>把今晚交给一部电影</span>
+    </div></div>
     <div class="result-wrap">
       <div class="result-poster">
         <img id="rPoster" alt="" />
@@ -61,7 +73,7 @@
         <div class="r-actions">
           <button id="againBtn" class="cta">换一部 ↻</button>
           <button id="retestBtn" class="ghost">重新测</button>
-          <button id="aiBtn" class="ghost" title="AI 全盘解读（当前直连 agnes-ai）">✦ 不良解读</button>
+          <button id="aiBtn" class="ghost" title="AI 全盘解读（当前直连 agnes-ai）">✦ 不良有话说</button>
         </div>
         <pre id="aiPrompt" class="ai-prompt" hidden></pre>
       </div>

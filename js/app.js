@@ -84,13 +84,14 @@
     replyStreamEl = $("#replyStream");
     replyStreamEl.innerHTML = "";
     // 重建问题卡默认结构（summary 屏会覆盖 innerHTML，重测时需复原）
-    quizCardEl.innerHTML = '<div class="q-cat" id="qCat"></div><h2 id="qText"></h2><div id="qOptions" class="options"></div>';
+    quizCardEl.innerHTML = '<div class="q-index" id="qIdx"></div><div class="q-cat" id="qCat"></div><h2 id="qText"></h2><div id="qOptions" class="options"></div>';
     quizCardEl.classList.remove("dissolve", "enter");
     show("quiz");
     renderQuestion(0);
   }
   function renderQuestion(idx) {
     const q = quizQs[idx];
+    $("#qIdx").innerHTML = '第 <b>' + (idx + 1) + '</b> / ' + QUIZ_N + ' 题';
     $("#qCat").textContent = q.category || "";
     $("#qText").textContent = q.question;
     $("#qNow").textContent = idx + 1;
@@ -137,12 +138,15 @@
       '<div class="summary">' +
         '<div class="summary-kicker">你刚才说——</div>' +
         '<div class="summary-replies">' + replies.map((r) => '<span class="sr">' + r + '</span>').join("") + '</div>' +
-        '<p class="summary-line">好了，今晚的你也聊完了。<br>接下来，让一部电影接住你。</p>' +
-        '<button id="revealBtn" class="cta">揭晓今晚的电影 →</button>' +
+        '<p class="summary-line">聊完啦。现在，让一部电影<br>替今晚收个尾。</p>' +
+        '<button id="revealBtn" class="reveal-btn">揭晓今晚的电影 →</button>' +
       '</div>';
     quizCardEl.classList.remove("dissolve");
     void quizCardEl.offsetWidth;
     quizCardEl.classList.add("enter");
+    // 回复胶囊错落淡入
+    const pills = quizCardEl.querySelectorAll(".sr");
+    pills.forEach((p, i) => setTimeout(() => p.classList.add("in"), 120 + i * 90));
     $("#revealBtn").onclick = finishQuiz;
   }
   function finishQuiz() {
@@ -158,6 +162,11 @@
     }
     renderResult();
     show("result");
+    // 结果屏错落入场
+    const rw = $(".result-wrap");
+    rw.classList.remove("anim");
+    void rw.offsetWidth;
+    rw.classList.add("anim");
   }
   function renderResult() {
     const m = current;
@@ -181,7 +190,9 @@
     $("#rTags").innerHTML = tags.map((t) => `<span>${t}</span>`).join("");
     $("#rOverview").textContent = m.overview || "";
     $("#rReason").textContent = window.Match.buildReason(m, W);
-    $("#aiPrompt").hidden = true;
+    const pre = $("#aiPrompt");
+    pre.classList.remove("show");
+    pre.hidden = true;
   }
 
   /* ---------------- 事件 ---------------- */
@@ -215,6 +226,7 @@
     const prompt = window.Match.buildInterpretPrompt(answersText, current);
     const pre = $("#aiPrompt");
     pre.hidden = false;
+    requestAnimationFrame(() => pre.classList.add("show"));
     pre.classList.add("loading");
     pre.textContent = "正在探究你的内心，请稍后…";
     try {
@@ -252,4 +264,15 @@
 
   /* ---------------- 启动 ---------------- */
   buildWall();
+
+  /* 跟随鼠标的辉光 */
+  const fxCursor = document.getElementById("fxCursor");
+  if (fxCursor && window.matchMedia("(pointer:fine)").matches) {
+    window.addEventListener("mousemove", (e) => {
+      fxCursor.style.setProperty("--mx", e.clientX + "px");
+      fxCursor.style.setProperty("--my", e.clientY + "px");
+      document.body.classList.add("cursor-on");
+    });
+    document.addEventListener("mouseleave", () => document.body.classList.remove("cursor-on"));
+  }
 })();
