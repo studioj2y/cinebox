@@ -42,8 +42,8 @@
   }
 
   // ---- 加权维度: 今年新片 + TMDB 评分前100，约 +20% 选中概率 ----
-  const BOOST = 1.2;          // 池内选中权重倍数 (pickOne)
-  const POOL_LIFT = 0.12;     // 候选池内的上浮量 (单位: 温度 T)
+  const BOOST = 1.1;          // 池内选中权重倍数 (pickOne)
+  const POOL_LIFT = 0.05;     // 候选池内的上浮量 (单位: 温度 T)
   const CURRENT_YEAR = new Date().getFullYear();
   let _top100Cache = null;
   function getTop100(movies) {
