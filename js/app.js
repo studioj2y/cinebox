@@ -391,10 +391,10 @@
     const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
     const qa = quizQs.map((q, i) => `
-      <div style="margin:11px 0;padding-left:12px;border-left:3px solid #ff5e9c;">
-        <div style="font:600 14px/1.45 system-ui;color:#ffffff;">${i + 1}. ${esc(q.question)}</div>
-        <div style="font:13px/1.4 system-ui;color:#ffb6d4;margin-top:4px;">▸ ${esc(answers[i] ? answers[i].text : "")}</div>
-        <div style="font:13px/1.55 system-ui;color:#d9c4e6;margin-top:4px;">“${esc(answers[i] ? answers[i].reply : "")}”</div>
+      <div style="margin:7px 0;padding-left:10px;border-left:3px solid #ff5e9c;">
+        <div style="font:600 12px/1.3 system-ui;color:#ffffff;">${i + 1}. ${esc(q.question)}</div>
+        <div style="font:11px/1.25 system-ui;color:#ffb6d4;margin-top:2px;">▸ ${esc(answers[i] ? answers[i].text : "")}</div>
+        <div style="font:11px/1.35 system-ui;color:#d9c4e6;margin-top:2px;">“${esc(answers[i] ? answers[i].reply : "")}”</div>
       </div>`).join("");
 
     const aiBlock = aiText ? `
@@ -417,7 +417,7 @@
       <div style="padding:4px 22px 8px;">${qa}</div>
       ${aiBlock}
       <div style="display:flex;padding:14px 22px 4px;background:linear-gradient(180deg,#180d24,#140b1c);">
-        <img class="poster-cap" src="${esc(m.poster)}" crossorigin="anonymous" style="width:112px;height:162px;object-fit:cover;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.5);flex:0 0 auto;background:#2a1838;" />
+        <img class="poster-cap" src="${esc(m.poster)}" crossorigin="anonymous" style="width:140px;height:202px;object-fit:cover;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.5);flex:0 0 auto;background:#2a1838;" />
         <div style="flex:1;min-width:0;margin-left:14px;">
           <div style="font:700 16px/1.3 system-ui;color:#ffffff;">${esc(m.title)}</div>
           <div style="font:12px system-ui;color:#c9a9d6;margin-top:5px;">${esc([m.year, (m.genres || []).join("/")].filter(Boolean).join("  ·  "))}</div>
@@ -429,11 +429,11 @@
       <div style="display:flex;justify-content:center;padding:18px 22px 6px;">
         <div style="text-align:center;margin:0 13px;">
           <img src="images/qrcode.jpg" style="width:120px;height:120px;border-radius:10px;background:#fff;padding:6px;box-sizing:border-box;" />
-          <div style="font:12px system-ui;color:#ffb6d4;margin-top:7px;">扫码关注 不良少女放映组</div>
+          <div style="font:12px/1.45 system-ui;color:#ffb6d4;margin-top:7px;">扫码关注 <b style="color:#ff5e9c;">不良少女放映组</b><br/>陪你一起看电影</div>
         </div>
         <div style="text-align:center;margin:0 13px;">
           <img src="images/qrcode-domain.png" style="width:120px;height:120px;border-radius:10px;background:#fff;padding:6px;box-sizing:border-box;" />
-          <div style="font:12px system-ui;color:#b6d4ff;margin-top:7px;">扫码打开 不良陪你选电影</div>
+          <div style="font:12px/1.45 system-ui;color:#b6d4ff;margin-top:7px;">我也要测 <b style="color:#ff5e9c;">不良陪你选电影</b><br/>生成我的专属海报</div>
         </div>
       </div>
       <div style="text-align:center;font:11px system-ui;color:#8a6f99;padding:10px 0 18px;">CINEBOX · 不良少女放映组</div>
@@ -453,7 +453,7 @@
     Promise.all(imgs.map(loadImg)).then(() => {
       if (cap && !cap.naturalWidth) {
         const fb = document.createElement("div");
-        fb.style.cssText = "width:112px;height:162px;border-radius:10px;background:#2a1838;display:flex;align-items:center;justify-content:center;text-align:center;font:600 13px system-ui;color:#d9c4e6;padding:8px;box-sizing:border-box;flex:0 0 auto;";
+        fb.style.cssText = "width:140px;height:202px;border-radius:10px;background:#2a1838;display:flex;align-items:center;justify-content:center;text-align:center;font:600 13px system-ui;color:#d9c4e6;padding:8px;box-sizing:border-box;flex:0 0 auto;";
         fb.textContent = m.title || "";
         cap.replaceWith(fb);
       }
