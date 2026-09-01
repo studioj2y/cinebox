@@ -6,5 +6,8 @@
   "description": "不良陪你选电影 / CINEBOX — 静态问答站点 + Vercel Serverless 代理",
   "scripts": {
     "dev": "node dev-server.mjs"
+  },
+  "dependencies": {
+    "@vercel/kv": "^2.0.0"
   }
 }

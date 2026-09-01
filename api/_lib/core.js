@@ -59,13 +59,47 @@ function buildEndpoints() {
 // 负载均衡游标：每次请求从下一个 key 开始，使多 key 真正分摊流量
 let cursor = 0;
 
-// 简单内存缓存（按 电影 + 答案签名）。Serverless 实例内热，重启即清空。
-// 持久化（跨实例共享）请接 Vercel KV / Upstash，这里先保证结构正确。
-const cache = new Map();
+// 缓存：优先 Vercel KV（跨实例共享，多个 key/提供方 & 高并发下避免重复调用），
+// 未配置 KV 时自动降级为内存 Map（实例内热，重启清空）。
+// 启用 KV：在 Vercel 创建 KV store 并 Link 本项目即可（会自动注入 KV_REST_API_URL / KV_REST_API_TOKEN 等）。
+let kv = null;
+let kvTried = false;
+async function getKV() {
+  if (kvTried) return kv;
+  kvTried = true;
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) return null;
+  try {
+    const mod = await import("@vercel/kv");
+    kv = mod.kv; // @vercel/kv 自动读取注入的环境变量
+    return kv;
+  } catch (e) {
+    return null; // 本地未安装 @vercel/kv → 降级内存
+  }
+}
+
+const memCache = new Map();
 const CACHE_MAX = 1000;
 function cacheKey(movieId, answers) {
   const sig = crypto.createHash("md5").update(JSON.stringify(answers || [])).digest("hex");
   return `mk:${movieId}:${sig}`;
+}
+async function cacheGet(key) {
+  const k = await getKV();
+  if (k) {
+    try {
+      const v = await k.get(key);
+      return v || null;
+    } catch (e) { /* 忽略，降级 */ }
+  }
+  return memCache.has(key) ? memCache.get(key) : null;
+}
+async function cacheSet(key, val) {
+  const k = await getKV();
+  if (k) {
+    try { await k.set(key, val, { ex: 86400 }); return; } catch (e) { /* 降级 */ }
+  }
+  if (memCache.size >= CACHE_MAX) memCache.delete(memCache.keys().next().value);
+  memCache.set(key, val);
 }
 
 const SYSTEM_PROMPT =
@@ -77,7 +111,8 @@ export async function interpret({ movieId, title, answers, prompt }) {
   if (!prompt) throw new Error("缺少 prompt");
 
   const key = cacheKey(movieId, answers);
-  if (cache.has(key)) return { text: cache.get(key), cached: true };
+  const cached = await cacheGet(key);
+  if (cached) return { text: cached, cached: true };
 
   const endpoints = buildEndpoints();
   if (!endpoints.length)
@@ -122,8 +157,8 @@ export async function interpret({ movieId, title, answers, prompt }) {
       if (!/今晚就它了[。\.！!]?$/.test(t.replace(/\s+$/, ""))) {
         t = t.replace(/\s+$/, "") + "\n\n今晚就它了。";
       }
-      if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);
-      cache.set(key, t);
+      if (cache.size >= CACHE_MAX) memCache.delete(memCache.keys().next().value);
+      await cacheSet(key, t);
       return { text: t, cached: false, provider: name };
     } catch (e) {
       lastErr = e.message;
