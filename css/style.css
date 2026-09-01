@@ -29,19 +29,19 @@ body {
 .fx { position: fixed; inset: 0; pointer-events: none; z-index: 50; }
 
 /* 缓慢漂移的彩色极光光斑，screen 混合提亮画面 */
-.fx-aurora { mix-blend-mode: screen; opacity: .55; }
+.fx-aurora { mix-blend-mode: screen; opacity: .85; }
 .fx-aurora::before, .fx-aurora::after {
-  content: ""; position: absolute; width: 60vw; height: 60vw; border-radius: 50%;
-  filter: blur(70px); will-change: transform;
+  content: ""; position: absolute; width: 72vw; height: 72vw; border-radius: 50%;
+  filter: blur(90px); will-change: transform;
 }
 .fx-aurora::before {
-  top: -18vw; left: -10vw;
-  background: radial-gradient(circle at 40% 40%, rgba(255,79,158,.85), rgba(255,79,158,0) 62%);
+  top: -22vw; left: -14vw;
+  background: radial-gradient(circle at 40% 40%, rgba(255,79,158,.98), rgba(255,79,158,0) 66%);
   animation: drift1 26s ease-in-out infinite alternate;
 }
 .fx-aurora::after {
-  bottom: -22vw; right: -12vw;
-  background: radial-gradient(circle at 60% 60%, rgba(122,78,224,.9), rgba(122,78,224,0) 60%);
+  bottom: -26vw; right: -16vw;
+  background: radial-gradient(circle at 60% 60%, rgba(122,78,224,1), rgba(122,78,224,0) 64%);
   animation: drift2 32s ease-in-out infinite alternate;
 }
 @keyframes drift1 {
@@ -212,7 +212,7 @@ body.cursor-on .fx-cursor { opacity: 1; }
 .quiz-card {
   position: relative; background: linear-gradient(180deg, rgba(38,22,80,.92), rgba(31,17,64,.92));
   border: 1px solid rgba(196,176,230,.18); border-radius: var(--radius);
-  padding: 32px 28px 30px; box-shadow: var(--shadow-soft);
+  padding: 32px 28px 30px; box-shadow: var(--shadow-soft); min-height: 300px;
   backdrop-filter: blur(10px);
 }
 .quiz-card::before {
@@ -229,21 +229,24 @@ body.cursor-on .fx-cursor { opacity: 1; }
 .options { display: flex; flex-direction: column; gap: 12px; }
 .opt {
   pointer-events: auto; text-align: left; background: rgba(255,255,255,.04); border: 1px solid rgba(196,176,230,.2); color: var(--text);
-  padding: 15px 18px 15px 44px; border-radius: 12px; cursor: pointer; font-size: 16px; position: relative; transition: all .18s ease;
+  padding: 15px 18px 15px 44px; border-radius: 12px; cursor: pointer; font-size: 16px; position: relative;
+  opacity: 0; transform: translateY(12px);
+  transition: opacity .55s ease, transform .55s cubic-bezier(.2,.8,.2,1), background .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 .opt::before {
   content: ""; position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
   width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid rgba(196,176,230,.5); transition: all .18s ease;
 }
-.opt:hover { border-color: var(--accent); background: rgba(255,79,158,.12); transform: translateX(4px); box-shadow: 0 4px 20px rgba(255,79,158,.18); }
+.opt.in { opacity: 1; transform: none; }
+.opt:hover { border-color: var(--accent); background: rgba(255,79,158,.12); transform: translateX(6px); box-shadow: 0 4px 20px rgba(255,79,158,.18); transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
 .opt:hover::before { border-color: var(--accent); box-shadow: 0 0 12px rgba(255,79,158,.6); }
-.opt:active { transform: translateX(4px) scale(.99); }
+.opt:active { transform: translateX(6px) scale(.99); }
 
 /* ---------- 回复流 + 溶解/淡入动画 ---------- */
 #quiz { overflow-y: auto; }
 .reply-stream {
   display: flex; flex-direction: column; gap: 10px;
-  width: 100%; max-height: 34vh; overflow-y: auto;
+  width: 100%; max-height: 34vh; overflow-y: auto; scroll-behavior: smooth;
   margin: 4px 0 18px; padding: 6px 4px;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 6px), transparent 100%);
   mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 6px), transparent 100%);
@@ -257,7 +260,7 @@ body.cursor-on .fx-cursor { opacity: 1; }
   border-left: 3px solid var(--accent);
   align-self: flex-start; max-width: 92%;
   opacity: 0; transform: translateY(14px) scale(.98); filter: blur(4px);
-  transition: opacity .55s ease, transform .55s cubic-bezier(.2,.8,.2,1), filter .55s ease;
+  transition: opacity .7s ease, transform .7s cubic-bezier(.2,.8,.2,1), filter .7s ease;
 }
 .reply-item .rd {
   flex: 0 0 auto; margin-top: 2px; font-size: 12px; color: var(--accent2);
@@ -265,10 +268,10 @@ body.cursor-on .fx-cursor { opacity: 1; }
   background: rgba(255,210,63,.12); border: 1px solid rgba(255,210,63,.4);
 }
 .reply-item.in { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-.quiz-card { transition: opacity .42s ease, transform .42s ease, filter .42s ease; }
+.quiz-card { transition: opacity .6s ease, transform .6s ease, filter .6s ease; }
 .quiz-card.dissolve { opacity: 0; transform: translateY(-8px) scale(.97); filter: blur(6px); pointer-events: none; }
-.quiz-card.enter { animation: cardIn .46s cubic-bezier(.2,.8,.2,1) both; }
-@keyframes cardIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.quiz-card.enter { animation: cardIn .62s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes cardIn { from { opacity: 0; transform: translateY(26px) scale(.985); } to { opacity: 1; transform: none; } }
 
 /* ---------- 总结过渡屏 ---------- */
 .summary { text-align: center; padding: 8px 2px 4px; }
@@ -369,6 +372,11 @@ body.cursor-on .fx-cursor { opacity: 1; }
   color: var(--accent2); margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid rgba(196,176,230,.14);
 }
 .ai-prompt.loading { color: #b9a8e6; font-style: italic; }
+.ai-prompt.typing::after {
+  content: "▌"; display: inline; margin-left: 1px; color: var(--accent);
+  font-style: normal; animation: caretBlink 1s step-end infinite;
+}
+@keyframes caretBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
 /* 结果屏错落入场 */
 .result-wrap.anim .result-poster { animation: posterFloat 6s ease-in-out infinite, fadeUp .7s ease both; }
@@ -388,6 +396,7 @@ body.cursor-on .fx-cursor { opacity: 1; }
   .result-wrap { padding-top: 26px; }
   .result-poster { width: 200px; height: 300px; }
   #qText { font-size: 21px; }
+  .quiz-card { min-height: 264px; padding: 26px 20px 24px; }
   .hero-cta-zone { margin-top: 6px; }
   .hero-logo { width: 200px; height: auto; opacity: 0.9; margin-bottom: -38px; }
   .brand-mark { font-size: 10px; letter-spacing: 3px; }

@@ -10,6 +10,24 @@
     quiz: $("#quiz"),
     result: $("#result"),
   };
+  let typeTimer = null;
+  function typeText(el, text) {
+    if (typeTimer) clearInterval(typeTimer);
+    el.textContent = "";
+    el.classList.remove("loading");
+    el.classList.add("typing");
+    let i = 0;
+    typeTimer = setInterval(() => {
+      el.textContent += text.charAt(i) || "";
+      i++;
+      el.scrollTop = el.scrollHeight;
+      if (i >= text.length) {
+        clearInterval(typeTimer);
+        typeTimer = null;
+        el.classList.remove("typing");
+      }
+    }, 28);
+  }
   function show(name) {
     Object.values(screens).forEach((s) => s.classList.remove("active"));
     screens[name].classList.add("active");
@@ -107,6 +125,8 @@
       b.onclick = () => chooseOption(idx, opt);
       box.appendChild(b);
     });
+    // 选项错落淡入，整体节奏更舒缓
+    box.querySelectorAll(".opt").forEach((b, i) => setTimeout(() => b.classList.add("in"), 80 + i * 80));
     // 问题卡进场：从下方淡入
     quizCardEl.classList.remove("enter");
     void quizCardEl.offsetWidth;
@@ -121,7 +141,7 @@
     replyStreamEl.appendChild(item);
     requestAnimationFrame(() => item.classList.add("in"));
     replyStreamEl.scrollTop = replyStreamEl.scrollHeight;
-    // 当前问题卡溶解
+    // 当前问题卡溶解（放慢节奏，给一点呼吸感）
     quizCardEl.classList.add("dissolve");
     setTimeout(() => {
       if (idx + 1 < QUIZ_N) {
@@ -130,7 +150,7 @@
         $("#progressBar").style.width = "100%";
         renderSummary();
       }
-    }, 420);
+    }, 620);
   }
   function renderSummary() {
     const replies = answers.map((a) => a.reply || "好，记下了~").filter(Boolean);
@@ -226,6 +246,8 @@
     const prompt = window.Match.buildInterpretPrompt(answersText, current);
     const pre = $("#aiPrompt");
     pre.hidden = false;
+    if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
+    pre.classList.remove("typing");
     requestAnimationFrame(() => pre.classList.add("show"));
     pre.classList.add("loading");
     pre.textContent = "正在探究你的内心，请稍后…";
@@ -253,8 +275,8 @@
       } else if (!text) {
         text = "（AI 返回为空）";
       }
-      pre.classList.remove("loading");
-      pre.textContent = text;
+      // 逐字打字机呈现
+      typeText(pre, text);
     } catch (e) {
       pre.classList.remove("loading");
       pre.textContent = "（AI 接口暂不可用：" + e.message + "）\n\n以下是已构造的提示词，可手动发给任意 LLM：\n\n" + prompt;
