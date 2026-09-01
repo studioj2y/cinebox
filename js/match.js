@@ -68,8 +68,8 @@
     const scored = movies.map((m) => ({ m, r: scoreMovie(m, W) }));
     const maxScore = scored.reduce((a, s) => Math.max(a, s.r.score), 0);
 
-    // 相关度门限: 至少命中过标签或达到最高分的 35%，避免完全无关片冒泡
-    const gate = Math.max(1, maxScore * 0.35);
+    // 相关度门限: 至少命中过标签或达到最高分的 25%，避免完全无关片冒泡
+    const gate = Math.max(1, maxScore * 0.25);
     const relevant = scored.filter((s) => s.r.matched > 0 && s.r.score >= gate);
 
     // 温度扰动: 每次调用给相关片加不同噪声，让不同相关片轮流进入候选池
