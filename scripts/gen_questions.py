@@ -658,6 +658,124 @@ RAW = [
     ]),
 ]
 
+def reply_for(question, opt_text, tags):
+    """为单题单选项生成一句松弛、带点酷的回复（不良少女放映组风）。
+    优先按问题/选项的场景关键词精准呼应，否则按标签基调兜底。≤14字。"""
+    q, t = question, opt_text
+    # ---- 1) 场景关键词精准呼应 ----
+    if "还睡" in q or "睡吗" in q:
+        if "不睡" in t or "不眠" in t:
+            return "又是一个不眠之夜~"
+        return "看完就好好睡一觉~"
+    if "睡" in t and "补个觉" in t:
+        return "补完觉，精神看。"
+    if "天气" in q or "天气" in t:
+        if "晴" in t: return "趁好天，看部暖的。"
+        if "雨" in t: return "雨声配电影，刚好。"
+        if "雷" in t: return "雷声里看场燃的。"
+        if "雾" in t: return "雾里看片，有点意思。"
+    if "小动物" in q or "动物" in q:
+        if "猫" in t: return "猫样瘫着，挺好。"
+        if "狗" in t: return "有人陪，踏实。"
+        if "鹰" in t: return "想飞就飞。"
+        if "树懒" in t: return "躺平有理。"
+    if "配杯" in q or "喝的" in q:
+        if "可可" in t: return "捧着热可可看。"
+        if "啤" in t: return "冰啤配片，爽。"
+        if "红酒" in t: return "红酒微醺，浪漫。"
+        if "黑咖" in t: return "黑咖提神，烧脑去。"
+    if "颜色" in q:
+        if "橙" in t: return "暖橙色的夜，刚好。"
+        if "蓝" in t: return "冷蓝一下，清醒。"
+        if "紫" in t: return "暗紫调，带感。"
+        if "黄" in t: return "亮黄一下，提神。"
+    if "首歌" in q:
+        if "轻音乐" in t: return "轻音乐缓缓，治愈。"
+        if "摇滚" in t: return "摇滚起，燃起来。"
+        if "情歌" in t: return "情歌起，心软。"
+        if "电子" in t: return "电子脉冲，上头。"
+    if "电影是种天气" in q:
+        if "暴风雪" in t: return "暴风雪里躲进电影。"
+        if "雷雨" in t: return "雷雨天里狂奔看。"
+        if "大雾" in t: return "大雾里一个人走。"
+    if "周末" in q or "下班" in q or "课后" in q:
+        if "出门" in t or "浪" in t: return "出去浪，看前先嗨。"
+        if "宅" in t: return "宅着看，最自在。"
+        if "饭" in t: return "吃饱再看，香。"
+        if "觉" in t: return "补完觉，精神看。"
+    if "深夜" in q or "几点" in q or "深夜场" in q:
+        if "狂欢" in t or "嗨" in t: return "深夜拉人，热闹。"
+        if "独处" in t: return "深夜一个人，刚好。"
+        if "午后" in t: return "午后慢看，惬意。"
+        if "早晨" in t: return "早起看片，清新。"
+        if "通勤" in t: return "路上看，打发时间。"
+    if "电" in q:
+        if "满电" in t: return "满电上，看部燃的。"
+        if "半电" in t: return "半电，轻松点。"
+        if "没电" in t: return "没电了，看部治愈。"
+    if "压力" in q:
+        if "爆表" in t: return "压力爆表，看部泄压的。"
+        if "适中" in t: return "还行，温温看。"
+        if "没" in t: return "没压力，随便看。"
+    if "恋爱" in q or "单身" in q or "舔伤" in q:
+        if "热恋" in t: return "热恋中，甜片走起。"
+        if "单身" in t: return "单身也香，自己看。"
+        if "舔伤" in t: return "舔伤中，需要暖。"
+    if "告别" in q or "开始" in q:
+        if "告别" in t: return "好好告别，也体面。"
+        if "开始" in t: return "新开始，燃一点。"
+    if "过去" in q or "未来" in q:
+        if "过去" in t: return "回不去，就看看。"
+        if "未来" in t: return "奔未来，刺激。"
+    if "异乡" in q or "家乡" in q:
+        if "异乡" in t: return "异乡夜，自己暖。"
+        if "家乡" in t: return "家乡味，踏实。"
+    if "味道" in q or "口味" in q or "甜" in q or "辣" in q:
+        if "甜" in t: return "甜的，刚好暖。"
+        if "辣" in t: return "辣的，够劲。"
+        if "苦" in t: return "苦的，也尝尝。"
+        if "酸" in t: return "酸的，皱眉但真。"
+    if "避风港" in q:
+        if "海边" in t: return "海边小屋，躲进去。"
+        if "太空" in t: return "太空舱，漂着看。"
+        if "老街" in t: return "老街巷，踏实。"
+        if "战场" in t: return "战场，燃起来。"
+    if "两小时" in q or "后是" in q:
+        if "满血" in t: return "满血复活，走起。"
+        if "平静" in t: return "平静下来，挺好。"
+        if "泪" in t: return "哭完，轻一点。"
+        if "通透" in t: return "通透了，值。"
+    if "态度" in q:
+        if "热爱" in t: return "热爱，就冲。"
+        if "疏离" in t: return "疏离，也清醒。"
+        if "温柔" in t: return "温柔，难得。"
+        if "清醒" in t: return "清醒，难得。"
+    if "画面" in q:
+        if "星空" in t: return "星空下，发会儿呆。"
+        if "人群" in t: return "人群里，热闹。"
+        if "旧照片" in t: return "旧照片，怀旧。"
+        if "雨夜" in t: return "雨夜，刚好独处。"
+    # ---- 2) 标签基调兜底 ----
+    tone = {
+        "治愈": "行，就慢慢暖过来。", "温暖": "暖一下，刚好。", "温情": "温柔的，记下了。",
+        "热血": "中，那就燃就完了。", "爽": "爽就完事。", "轻松": "轻松看，舒服。", "喜剧": "笑就完事。",
+        "致郁": "懂，丧也挺真。", "孤独": "一个人，也挺好。", "暗黑": "冷一点，带感。", "冷峻": "冷着，清醒。",
+        "悬疑": "烧脑陪你。", "烧脑": "脑子动起来。", "浪漫": "甜，安排上。", "爱情": "恋爱脑上线。", "和伴侣": "俩人看，甜。",
+        "慢节奏": "不急，慢慢品。", "快节奏": "快点，过瘾。", "冒险": "浪起来。", "旅行": "出发，看路上。",
+        "社会": "清醒点看，也行。", "写实": "真实，戳心。", "战争": "厚重，来吧。", "历史": "老故事，有味。",
+        "音乐": "跟着律动看。", "美食": "看饿了，馋。", "职场": "打工人，懂。", "青春": "少年气，上头。", "成长": "长大ing。",
+        "家庭": "家的味道，暖。", "恐怖": "凉一下，刺激。", "奇幻": "做梦去。", "童话": "梦一下。", "动画": "动画也香。",
+        "明亮": "亮堂堂，舒服。", "荒诞": "荒诞就乐。", "震撼": "震撼一下，值。", "经典老片": "老片经看。", "新片": "新鲜货，尝尝。",
+        "和朋友": "拉上朋友，热闹。", "一个人看": "一个人，自在。", "通勤": "路上看，打发。", "深夜": "深夜场，对味。", "周末": "周末窝着，爽。",
+        "惊悚": "凉一下，刺激。",
+    }
+    for tag in tags:
+        if tag in tone:
+            return tone[tag]
+    # ---- 3) 兜底 ----
+    return "好，记下了~"
+
+
 def build():
     questions = []
     for i, (cat, q, opts) in enumerate(RAW, 1):
@@ -666,7 +784,7 @@ def build():
             weights = {}
             for t in tags:
                 weights[t] = weights.get(t, 0) + 1
-            options.append({"text": label, "weights": weights})
+            options.append({"text": label, "weights": weights, "reply": reply_for(q, label, tags)})
         questions.append({
             "id": i,
             "category": cat,

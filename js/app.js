@@ -66,6 +66,8 @@
   let answers = [];
   let ranked = [];
   let current = null;
+  let quizCardEl = null;
+  let replyStreamEl = null;
 
   function shuffle(a) {
     a = a.slice();
@@ -78,6 +80,12 @@
   function startQuiz() {
     quizQs = shuffle(QUESTIONS).slice(0, QUIZ_N);
     answers = [];
+    quizCardEl = $("#quizCard");
+    replyStreamEl = $("#replyStream");
+    replyStreamEl.innerHTML = "";
+    // 重建问题卡默认结构（summary 屏会覆盖 innerHTML，重测时需复原）
+    quizCardEl.innerHTML = '<div class="q-cat" id="qCat"></div><h2 id="qText"></h2><div id="qOptions" class="options"></div>';
+    quizCardEl.classList.remove("dissolve", "enter");
     show("quiz");
     renderQuestion(0);
   }
@@ -88,23 +96,54 @@
     $("#qNow").textContent = idx + 1;
     $("#qTotal").textContent = QUIZ_N;
     $("#progressBar").style.width = ((idx) / QUIZ_N) * 100 + "%";
+    quizCardEl.classList.remove("dissolve");
     const box = $("#qOptions");
     box.innerHTML = "";
     q.options.forEach((opt) => {
       const b = document.createElement("button");
       b.className = "opt";
       b.textContent = opt.text;
-      b.onclick = () => {
-        answers.push(opt);
-        if (idx + 1 < QUIZ_N) {
-          renderQuestion(idx + 1);
-        } else {
-          $("#progressBar").style.width = "100%";
-          finishQuiz();
-        }
-      };
+      b.onclick = () => chooseOption(idx, opt);
       box.appendChild(b);
     });
+    // 问题卡进场：从下方淡入
+    quizCardEl.classList.remove("enter");
+    void quizCardEl.offsetWidth;
+    quizCardEl.classList.add("enter");
+  }
+  function chooseOption(idx, opt) {
+    answers.push(opt);
+    // 把这句回复淡入上移到顶部回复流
+    const item = document.createElement("div");
+    item.className = "reply-item";
+    item.textContent = opt.reply || "好，记下了~";
+    replyStreamEl.appendChild(item);
+    requestAnimationFrame(() => item.classList.add("in"));
+    replyStreamEl.scrollTop = replyStreamEl.scrollHeight;
+    // 当前问题卡溶解
+    quizCardEl.classList.add("dissolve");
+    setTimeout(() => {
+      if (idx + 1 < QUIZ_N) {
+        renderQuestion(idx + 1);
+      } else {
+        $("#progressBar").style.width = "100%";
+        renderSummary();
+      }
+    }, 420);
+  }
+  function renderSummary() {
+    const replies = answers.map((a) => a.reply || "好，记下了~").filter(Boolean);
+    quizCardEl.innerHTML =
+      '<div class="summary">' +
+        '<div class="summary-kicker">你刚才说——</div>' +
+        '<div class="summary-replies">' + replies.map((r) => '<span class="sr">' + r + '</span>').join("") + '</div>' +
+        '<p class="summary-line">好了，今晚的你也聊完了。<br>接下来，让一部电影接住你。</p>' +
+        '<button id="revealBtn" class="cta">揭晓今晚的电影 →</button>' +
+      '</div>';
+    quizCardEl.classList.remove("dissolve");
+    void quizCardEl.offsetWidth;
+    quizCardEl.classList.add("enter");
+    $("#revealBtn").onclick = finishQuiz;
   }
   function finishQuiz() {
     ranked = window.Match.recommend(answers, MOVIES, { poolSize: 8 });
