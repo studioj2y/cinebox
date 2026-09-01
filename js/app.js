@@ -93,6 +93,7 @@
   let current = null;
   let quizCardEl = null;
   let replyStreamEl = null;
+  let ghostLayerEl = null; // 回复「幽灵」浮现层
   let quizLocked = false; // 防止溶解/过场期间的重复点击导致跳题
   let aiLoading = false;  // 防止「不良有话说」重复点击/并发请求
 
@@ -110,7 +111,9 @@
     quizLocked = false;
     quizCardEl = $("#quizCard");
     replyStreamEl = $("#replyStream");
+    ghostLayerEl = $("#ghostLayer");
     replyStreamEl.innerHTML = "";
+    if (ghostLayerEl) ghostLayerEl.innerHTML = "";
     // 重建问题卡默认结构（summary 屏会覆盖 innerHTML，重测时需复原）
     quizCardEl.innerHTML = '<div class="q-index" id="qIdx"></div><div class="q-cat" id="qCat"></div><h2 id="qText"></h2><div id="qOptions" class="options"></div>';
     quizCardEl.classList.remove("dissolve", "enter");
@@ -118,6 +121,7 @@
     renderQuestion(0);
   }
   function renderQuestion(idx) {
+    if (ghostLayerEl) ghostLayerEl.innerHTML = ""; // 清掉上一题残留的「幽灵」回复
     const q = quizQs[idx];
     $("#qIdx").innerHTML = '第 <b>' + (idx + 1) + '</b> / ' + QUIZ_N + ' 题';
     $("#qCat").textContent = q.category || "";
@@ -146,15 +150,35 @@
     if (quizLocked) return; // 防重复点击/穿透，避免跳题或重来
     quizLocked = true;
     answers.push(opt);
-    // 把这句回复淡入上移到顶部回复流
-    const item = document.createElement("div");
-    item.className = "reply-item";
-    item.textContent = opt.reply || "好，记下了~";
-    replyStreamEl.appendChild(item);
-    requestAnimationFrame(() => item.classList.add("in"));
-    replyStreamEl.scrollTop = replyStreamEl.scrollHeight;
-    // 当前问题卡溶解（放慢节奏，给一点呼吸感）
+    const reply = opt.reply || "好，记下了~";
+
+    // 阶段①（t0）：当前问题卡溶解模糊、缓缓上浮消散
     quizCardEl.classList.add("dissolve");
+
+    // 阶段②（t≈520ms，趁溶解进行中）：在模糊处，回复「幽灵」由模糊逐渐清晰形成
+    setTimeout(() => {
+      const ghost = document.createElement("div");
+      ghost.className = "reply-ghost";
+      ghost.textContent = reply;
+      ghostLayerEl.appendChild(ghost);
+      requestAnimationFrame(() => ghost.classList.add("form"));
+    }, 520);
+
+    // 阶段③（形成后停留片刻）：回复上浮淡出，同时真正落入顶部回复流（淡入上移）
+    const T_LIFT = 520 + 950 + 260; // form 时长 .95s + 停留 .26s
+    setTimeout(() => {
+      const ghost = ghostLayerEl.querySelector(".reply-ghost");
+      if (ghost) ghost.classList.add("lift");
+      const item = document.createElement("div");
+      item.className = "reply-item";
+      item.textContent = reply;
+      replyStreamEl.appendChild(item);
+      requestAnimationFrame(() => item.classList.add("in"));
+      replyStreamEl.scrollTop = replyStreamEl.scrollHeight;
+    }, T_LIFT);
+
+    // 阶段④（回复上浮完成后稍作停顿）：新问题从屏幕底部由外向内上浮入场
+    const T_NEXT = T_LIFT + 800 + 320; // lift 时长 .8s + 停顿 .32s
     setTimeout(() => {
       if (idx + 1 < QUIZ_N) {
         renderQuestion(idx + 1);
@@ -163,9 +187,10 @@
         renderSummary();
       }
       quizLocked = false;
-    }, 800);
+    }, T_NEXT);
   }
   function renderSummary() {
+    if (ghostLayerEl) ghostLayerEl.innerHTML = ""; // 清掉最后一题残留的「幽灵」回复
     const replies = answers.map((a) => a.reply || "好，记下了~").filter(Boolean);
     quizCardEl.innerHTML =
       '<div class="summary">' +

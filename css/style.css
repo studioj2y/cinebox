@@ -276,6 +276,28 @@ body.cursor-on .fx-cursor { opacity: 1; }
 /* 新问题从屏幕底部、由外向内上浮（带模糊→清晰），与回复气泡上浮的视觉要素统一 */
 @keyframes cardIn { from { opacity: 0; transform: translateY(74vh) scale(.94); filter: blur(13px); } to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); } }
 
+/* ---------- 回复「幽灵」浮现层（四阶段过渡） ---------- */
+/* 独立固定层覆盖视口中央，pointer-events:none，仅 quiz 屏激活时可见（受 #quiz stacking 约束） */
+.ghost-layer {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 40; padding: 0 24px;
+}
+.reply-ghost {
+  max-width: 560px; text-align: center;
+  font-size: 21px; line-height: 1.55; font-weight: 600; color: #f6ecff;
+  padding: 18px 28px; border-radius: 18px;
+  background: linear-gradient(135deg, rgba(122,78,224,.30), rgba(255,79,158,.18));
+  border: 1px solid rgba(255,79,158,.45);
+  box-shadow: 0 12px 44px rgba(255,79,158,.30);
+  opacity: 0; filter: blur(16px); transform: translateY(12px) scale(.94);
+}
+/* 阶段②：由模糊逐渐清晰形成（在问题消散的模糊中浮现） */
+.reply-ghost.form { animation: ghostForm .95s cubic-bezier(.2,.8,.2,1) forwards; }
+@keyframes ghostForm { to { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); } }
+/* 阶段③：回复上浮、淡出，同时顶部回复流中真正落位 */
+.reply-ghost.lift { animation: ghostLift .8s cubic-bezier(.4,0,.2,1) forwards; }
+@keyframes ghostLift { to { opacity: 0; transform: translateY(-80px) scale(.97); filter: blur(8px); } }
+
 /* ---------- 二维码关注卡（解读完成后显示） ---------- */
 .qr-cta {
   margin-top: 22px; padding: 22px 22px 20px;
