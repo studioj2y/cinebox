@@ -459,7 +459,7 @@
     // 点开后立刻在最下方显示「正在生成」提示
     area.hidden = false;
     statusEl.hidden = false;
-    statusEl.textContent = "正在为您生成海报，请稍后…";
+    statusEl.textContent = "正在为您生成海报，请稍候…";
     statusEl.className = "poster-status loading";
     imgEl.hidden = true;
     area.scrollIntoView({ behavior: "smooth", block: "end" });
