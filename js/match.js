@@ -41,6 +41,25 @@
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
   }
 
+  // ---- 加权维度: 今年新片 + TMDB 评分前100，约 +20% 选中概率 ----
+  const BOOST = 1.2;          // 池内选中权重倍数 (pickOne)
+  const POOL_LIFT = 0.12;     // 候选池内的上浮量 (单位: 温度 T)
+  const CURRENT_YEAR = new Date().getFullYear();
+  let _top100Cache = null;
+  function getTop100(movies) {
+    if (_top100Cache) return _top100Cache;
+    const arr = movies.slice().sort(
+      (a, b) => (b.tmdb_rating || b.rating || 0) - (a.tmdb_rating || a.rating || 0)
+    );
+    _top100Cache = new Set(arr.slice(0, 100).map((m) => m.id));
+    return _top100Cache;
+  }
+  function isBoosted(m, movies) {
+    if (m.year && m.year === CURRENT_YEAR) return true; // 今年新片
+    if (getTop100(movies).has(m.id)) return true;       // TMDB 评分前100
+    return false;
+  }
+
   // 推荐: 在"相关片"内做温度扰动排序，扩大可达集合、降低集中度
   function recommend(answers, movies, opts) {
     opts = opts || {};
@@ -55,10 +74,15 @@
 
     // 温度扰动: 每次调用给相关片加不同噪声，让不同相关片轮流进入候选池
     const T = Math.max(2, maxScore * 0.55);
-    relevant.forEach((s) => { s.perturbed = s.r.score + randn() * T; });
+    relevant.forEach((s) => {
+      s.boosted = isBoosted(s.m, movies);
+      // 加权维度: 给新片/前100 一点池内上浮，让它们更容易进入候选池
+      const lift = s.boosted ? T * POOL_LIFT : 0;
+      s.perturbed = s.r.score + randn() * T + lift;
+    });
     relevant.sort((a, b) => b.perturbed - a.perturbed);
 
-    return relevant.slice(0, poolSize).map((s) => ({ m: s.m, r: s.r }));
+    return relevant.slice(0, poolSize).map((s) => ({ m: s.m, r: s.r, boosted: s.boosted }));
   }
 
   // 从候选池里挑一部 (温度 softmax，偏向高分但更平缓，降低头部集中)
@@ -67,7 +91,10 @@
     const scores = ranked.map((x) => (x.r ? x.r.score : 0));
     const maxS = Math.max.apply(null, scores);
     const T = Math.max(1, maxS * 0.35);
-    const weights = scores.map((s) => Math.exp((s - maxS) / T));
+    // 加权维度: 今年新片 / 前100 的候选权重 ×1.2 (约 +20% 选中概率)
+    const weights = scores.map((s, i) =>
+      Math.exp((s - maxS) / T) * ((ranked[i].boosted) ? BOOST : 1)
+    );
     const sum = weights.reduce((a, b) => a + b, 0);
     let r = Math.random() * sum;
     for (let i = 0; i < weights.length; i++) {
