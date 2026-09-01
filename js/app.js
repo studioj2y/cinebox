@@ -380,7 +380,7 @@
   };
 
   /* 生成分享海报：把问答回顾 + 电影信息 + 双二维码合成一张可保存的图
-     内容从上到下：所有问题/答案/回复（含 AI 解读，若有）→ 电影海报与基本信息 → 两个对齐二维码
+     新布局（竖向海报风）：头部 → 问答回顾 → 电影海报（居中放大，作视觉主体）→ 电影信息在海报下方罗列（片名/年份类型/评分/标签/不良推荐+理由）→ 双二维码 → 页脚
      微信/手机浏览器无法触发文件下载，改为在结果页最下方直接渲染成 <img>，用户可长按保存/分享 */
   $("#posterBtn").onclick = generatePoster;
   function generatePoster() {
@@ -394,10 +394,10 @@
     const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
     const qa = quizQs.map((q, i) => `
-      <div style="margin:6px 0;padding-left:10px;border-left:3px solid #ff5e9c;">
-        <div style="font:600 11px/1.3 system-ui;color:#ffffff;">${i + 1}. ${esc(q.question)}</div>
-        <div style="font:10px/1.25 system-ui;color:#ffb6d4;margin-top:2px;">▸ ${esc(answers[i] ? answers[i].text : "")}</div>
-        <div style="font:10px/1.35 system-ui;color:#d9c4e6;margin-top:2px;">“${esc(answers[i] ? answers[i].reply : "")}”</div>
+      <div style="margin:8px 0;padding-left:12px;border-left:3px solid #ff5e9c;">
+        <div style="font:600 13px/1.4 system-ui;color:#ffffff;">${i + 1}. ${esc(q.question)}</div>
+        <div style="font:12px/1.35 system-ui;color:#ffb6d4;margin-top:3px;">▸ ${esc(answers[i] ? answers[i].text : "")}</div>
+        <div style="font:12px/1.5 system-ui;color:#d9c4e6;margin-top:3px;">“${esc(answers[i] ? answers[i].reply : "")}”</div>
       </div>`).join("");
 
     // 海报不再包含「不良有话说」AI 解读（太占空间）
@@ -413,17 +413,19 @@
         </div>
         <div style="margin-top:15px;font:600 21px/1.3 system-ui;color:#ffffff;">今晚为你选出</div>
       </div>
-      <div style="padding:6px 26px 12px;">${qa}</div>
-      <div style="display:flex;padding:18px 26px 8px;background:linear-gradient(180deg,#180d24,#140b1c);">
-        <img class="poster-cap" src="${esc(m.poster)}" crossorigin="anonymous" style="width:182px;height:263px;object-fit:cover;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.5);flex:0 0 auto;background:#2a1838;" />
-        <div style="flex:1;min-width:0;margin-left:18px;">
-          <div style="font:700 20px/1.3 system-ui;color:#ffffff;">${esc(m.title)}</div>
-          <div style="font:14px system-ui;color:#c9a9d6;margin-top:7px;">${esc([m.year, (m.genres || []).join("/")].filter(Boolean).join("  ·  "))}</div>
-          ${rating ? `<div style="font:14px system-ui;color:#ffd1a8;margin-top:6px;">${esc(rating)}</div>` : ""}
-          ${tags ? `<div style="font:14px system-ui;color:#b9e3ff;margin-top:7px;">${esc(tags)}</div>` : ""}
-          <div style="font:600 14px/1.4 system-ui;color:#ff7eb6;margin-top:12px;letter-spacing:1px;">不良推荐：</div>
-          <div style="font:14px/1.6 system-ui;color:#d9c4e6;margin-top:5px;">${esc(window.Match.buildReason(m, W))}</div>
-        </div>
+      <div style="padding:10px 26px 14px;">${qa}</div>
+      <div style="display:flex;justify-content:center;padding:16px 26px 8px;background:linear-gradient(180deg,#180d24,#140b1c);">
+        <img class="poster-cap" src="${esc(m.poster)}" crossorigin="anonymous" style="width:228px;height:329px;object-fit:cover;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.55);display:block;background:#2a1838;" />
+      </div>
+      <div style="padding:16px 30px 6px;text-align:center;">
+        <div style="font:700 22px/1.3 system-ui;color:#ffffff;">${esc(m.title)}</div>
+        <div style="font:14px system-ui;color:#c9a9d6;margin-top:7px;">${esc([m.year, (m.genres || []).join("/")].filter(Boolean).join("  ·  "))}</div>
+        ${rating ? `<div style="font:14px system-ui;color:#ffd1a8;margin-top:6px;">${esc(rating)}</div>` : ""}
+        ${tags ? `<div style="font:14px system-ui;color:#b9e3ff;margin-top:7px;">${esc(tags)}</div>` : ""}
+      </div>
+      <div style="padding:12px 36px 16px;">
+        <div style="font:600 14px/1.4 system-ui;color:#ff7eb6;letter-spacing:1px;text-align:center;">不良推荐：</div>
+        <div style="font:14px/1.7 system-ui;color:#d9c4e6;margin-top:7px;text-align:left;max-width:460px;margin-left:auto;margin-right:auto;">${esc(window.Match.buildReason(m, W))}</div>
       </div>
       <div style="display:flex;justify-content:center;padding:20px 22px 8px;">
         <div style="text-align:center;margin:0 15px;">
@@ -465,7 +467,7 @@
     Promise.all(imgs.map(loadImg)).then(() => {
       if (cap && !cap.naturalWidth) {
         const fb = document.createElement("div");
-        fb.style.cssText = "width:182px;height:263px;border-radius:12px;background:#2a1838;display:flex;align-items:center;justify-content:center;text-align:center;font:600 15px system-ui;color:#d9c4e6;padding:10px;box-sizing:border-box;flex:0 0 auto;";
+        fb.style.cssText = "width:228px;height:329px;border-radius:14px;background:#2a1838;display:flex;align-items:center;justify-content:center;text-align:center;font:600 16px system-ui;color:#d9c4e6;padding:12px;box-sizing:border-box;flex:0 0 auto;";
         fb.textContent = m.title || "";
         cap.replaceWith(fb);
       }
