@@ -93,6 +93,7 @@
   let quizCardEl = null;
   let replyStreamEl = null;
   let quizLocked = false; // 防止溶解/过场期间的重复点击导致跳题
+  let aiLoading = false;  // 防止「不良有话说」重复点击/并发请求
 
   function shuffle(a) {
     a = a.slice();
@@ -134,7 +135,7 @@
       box.appendChild(b);
     });
     // 选项错落淡入，整体节奏更舒缓
-    box.querySelectorAll(".opt").forEach((b, i) => setTimeout(() => b.classList.add("in"), 80 + i * 80));
+    box.querySelectorAll(".opt").forEach((b, i) => setTimeout(() => b.classList.add("in"), 120 + i * 120));
     // 问题卡进场：从下方淡入
     quizCardEl.classList.remove("enter");
     void quizCardEl.offsetWidth;
@@ -161,7 +162,7 @@
         renderSummary();
       }
       quizLocked = false;
-    }, 620);
+    }, 800);
   }
   function renderSummary() {
     const replies = answers.map((a) => a.reply || "好，记下了~").filter(Boolean);
@@ -177,7 +178,7 @@
     quizCardEl.classList.add("enter");
     // 回复胶囊错落淡入
     const pills = quizCardEl.querySelectorAll(".sr");
-    pills.forEach((p, i) => setTimeout(() => p.classList.add("in"), 120 + i * 90));
+    pills.forEach((p, i) => setTimeout(() => p.classList.add("in"), 160 + i * 120));
     $("#revealBtn").onclick = finishQuiz;
   }
   function finishQuiz() {
@@ -252,6 +253,8 @@
     model: "agnes-2.5-flash",
   };
   $("#aiBtn").onclick = async () => {
+    if (aiLoading) return; // 防重复点击/并发，避免重复请求
+    aiLoading = true;
     const W = window.Match.aggregate(answers);
     const answersText = quizQs.map((q, i) => `${i + 1}. ${q.question} → ${answers[i] ? answers[i].text : ""}`).join("\n");
     const prompt = window.Match.buildInterpretPrompt(answersText, current);
@@ -264,37 +267,65 @@
     pre.textContent = "正在探究你的内心，请稍后…";
     // 强制把画面拉到最下，确保解读框（在内容下方）立即可见
     requestAnimationFrame(() => { pre.scrollIntoView({ behavior: "smooth", block: "end" }); scrollResultBottom(); });
-    try {
-      const resp = await fetch(AGNES.base + "/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + AGNES.key },
-        body: JSON.stringify({
-          model: AGNES.model,
-          temperature: 0.8,
-          max_tokens: 500,
-          messages: [
-            { role: "system", content: "你是「不良少女放映组」的观影向导，懂电影也懂人心。用温暖、像朋友一样的语气写一段中文解读，可以带一点点不羁、漫不经心的酷劲儿——但别太用力，保持真诚自然。不要使用任何 markdown 格式。" },
-            { role: "user", content: prompt },
-          ],
-        }),
-      });
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      const data = await resp.json();
-      let text = (data.choices && data.choices[0] && data.choices[0].message.content) || "";
-      text = text.trim();
-      // 兜底：无论返回如何，结尾必带「今晚就它了。」
-      if (text && !/今晚就它了[。\.！!]?$/.test(text.replace(/\s+$/, ""))) {
-        text = text.replace(/\s+$/, "") + "\n\n今晚就它了。";
-      } else if (!text) {
-        text = "（AI 返回为空）";
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const MIN_LEN = 18; // 低于此长度视为被截断/异常短，触发重试
+    let text = "";
+    let lastErr = "";
+    const MAX = 3;
+    for (let attempt = 1; attempt <= MAX; attempt++) {
+      try {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 30000); // 30s 超时，避免悬挂
+        const resp = await fetch(AGNES.base + "/chat/completions", {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + AGNES.key },
+          body: JSON.stringify({
+            model: AGNES.model,
+            temperature: 0.8,
+            max_tokens: 900, // 调大，避免较长解读被服务端截断
+            messages: [
+              { role: "system", content: "你是「不良少女放映组」的观影向导，懂电影也懂人心。用温暖、像朋友一样的语气写一段中文解读，可以带一点点不羁、漫不经心的酷劲儿——但别太用力，保持真诚自然。不要使用任何 markdown 格式。" },
+              { role: "user", content: prompt },
+            ],
+          }),
+        });
+        clearTimeout(to);
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        let data;
+        try { data = await resp.json(); }
+        catch (e) { throw new Error("返回数据解析失败（疑似被截断）"); }
+        let t = (data.choices && data.choices[0] && data.choices[0].message.content) || "";
+        t = t.trim();
+        // 疑似截断 / 异常短：视为不稳定，重试
+        if (t.length < MIN_LEN) {
+          lastErr = "内容过短（疑似截断）";
+          if (attempt < MAX) { pre.textContent = "信号有点飘，我再探一次…"; await sleep(1000); continue; }
+          t = ""; // 用尽重试仍过短 → 当作空处理
+        }
+        text = t;
+        break;
+      } catch (e) {
+        lastErr = e.name === "AbortError" ? "请求超时" : e.message;
+        if (attempt < MAX) { pre.textContent = "网络打了个嗝，重新连一下…"; await sleep(1200); continue; }
       }
-      // 逐字打字机呈现
-      typeText(pre, text);
-    } catch (e) {
-      pre.classList.remove("loading");
-      pre.textContent = "（AI 接口暂不可用：" + e.message + "）\n\n以下是已构造的提示词，可手动发给任意 LLM：\n\n" + prompt;
     }
-    pre.scrollIntoView({ behavior: "smooth" });
+
+    if (!text) {
+      // 空 / 全部失败：温柔话术，提示可再次点击重新生成
+      pre.classList.remove("loading", "typing");
+      pre.textContent = "心灵太封闭了，深呼吸，我再看一次。\n（点「✦ 不良有话说」再试一回）";
+      aiLoading = false;
+      return;
+    }
+    // 兜底：无论返回如何，结尾必带「今晚就它了。」
+    if (!/今晚就它了[。\.！!]?$/.test(text.replace(/\s+$/, ""))) {
+      text = text.replace(/\s+$/, "") + "\n\n今晚就它了。";
+    }
+    // 逐字打字机呈现（打字过程中每 tick 钉底，确保最新字可见）
+    typeText(pre, text);
+    aiLoading = false;
   };
 
   /* ---------------- 启动 ---------------- */
