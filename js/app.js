@@ -266,6 +266,13 @@
     pre.classList.remove("typing", "loading");
     const qrCta = $("#qrCta");
     if (qrCta) { qrCta.classList.remove("show"); qrCta.hidden = true; }
+    // 切到新电影时，重置分享海报（避免旧海报/状态残留）
+    const pa = $("#posterArea");
+    if (pa) { pa.hidden = true; }
+    const ps = $("#posterStatus");
+    if (ps) { ps.hidden = true; ps.textContent = ""; ps.className = "poster-status"; }
+    const pi = $("#posterImg");
+    if (pi) { pi.hidden = true; pi.removeAttribute("src"); }
   }
 
   /* ---------------- 事件 ---------------- */
@@ -373,7 +380,8 @@
   };
 
   /* 生成分享海报：把问答回顾 + 电影信息 + 双二维码合成一张可保存的图
-     内容从上到下：所有问题/答案/回复（含 AI 解读，若有）→ 电影海报与基本信息 → 两个对齐二维码 */
+     内容从上到下：所有问题/答案/回复（含 AI 解读，若有）→ 电影海报与基本信息 → 两个对齐二维码
+     微信/手机浏览器无法触发文件下载，改为在结果页最下方直接渲染成 <img>，用户可长按保存/分享 */
   $("#posterBtn").onclick = generatePoster;
   function generatePoster() {
     const btn = $("#posterBtn");
@@ -440,6 +448,11 @@
     `;
     document.body.appendChild(root);
 
+    // 结果页最下方的海报展示区与状态提示
+    const area = $("#posterArea");
+    const statusEl = $("#posterStatus");
+    const imgEl = $("#posterImg");
+
     // 海报图加载失败时的兜底（避免 html2canvas 捕获到破图/taint）
     const cap = root.querySelector(".poster-cap");
     const imgs = Array.from(root.querySelectorAll("img"));
@@ -449,6 +462,14 @@
       if (img.complete) fin();
     });
     btn.disabled = true; const old = btn.textContent; btn.textContent = "生成中…";
+
+    // 点开后立刻在最下方显示「正在生成」提示
+    area.hidden = false;
+    statusEl.hidden = false;
+    statusEl.textContent = "正在为您生成海报，请稍后…";
+    statusEl.className = "poster-status loading";
+    imgEl.hidden = true;
+    area.scrollIntoView({ behavior: "smooth", block: "end" });
 
     Promise.all(imgs.map(loadImg)).then(() => {
       if (cap && !cap.naturalWidth) {
@@ -462,19 +483,22 @@
       if (typeof html2canvas === "undefined") throw new Error("海报组件未加载（请检查网络后重试）");
       return html2canvas(root, { useCORS: true, backgroundColor: "#140b1c", scale: 2, logging: false });
     }).then((canvas) => {
-      canvas.toBlob((blob) => {
-        if (!blob) throw new Error("海报生成失败");
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "cinebox-" + (m.title || "poster") + ".png";
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
-      });
+      // 不触发下载：转成 dataURL 直接渲染成 <img>，便于手机/微信长按保存或分享
+      const url = canvas.toDataURL("image/png");
+      imgEl.src = url;
+      imgEl.hidden = false;
+      statusEl.textContent = "已完成，可长按保存或分享";
+      statusEl.className = "poster-status done";
+      area.scrollIntoView({ behavior: "smooth", block: "end" });
+      btn.textContent = "📸 重新生成海报";
     }).catch((e) => {
-      alert("海报生成失败：" + (e && e.message ? e.message : e));
+      statusEl.textContent = "海报生成失败：" + (e && e.message ? e.message : e) + "（可重试）";
+      statusEl.className = "poster-status error";
     }).finally(() => {
       root.remove();
-      btn.disabled = false; btn.textContent = old;
+      btn.disabled = false;
+      // 生成成功则提示可重新生成；失败/未完成则恢复初始文案，便于重试
+      btn.textContent = imgEl.hidden ? old : "📸 重新生成海报";
     });
   }
 
