@@ -311,7 +311,7 @@
     pre.classList.remove("typing");
     requestAnimationFrame(() => pre.classList.add("show"));
     pre.classList.add("loading");
-    pre.textContent = "正在探究你的内心，请稍后…";
+    pre.textContent = "正在探究你的内心，请稍候…";
     // 强制把画面拉到最下，确保解读框（在内容下方）立即可见
     requestAnimationFrame(() => { pre.scrollIntoView({ behavior: "smooth", block: "end" }); scrollResultBottom(); });
 
