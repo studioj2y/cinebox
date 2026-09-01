@@ -145,6 +145,11 @@
     quizCardEl.classList.remove("enter");
     void quizCardEl.offsetWidth;
     quizCardEl.classList.add("enter");
+    // 入场动画结束后自动脱离 .enter：cardIn 的 fill-mode:both 会锁定 opacity:1，
+    // 若不脱离，后续 chooseOption 加 .dissolve 时其 transition 目标会被动画覆盖 → 问题卡不消散
+    quizCardEl.addEventListener("animationend", function onCardIn(e) {
+      if (e.animationName === "cardIn") quizCardEl.classList.remove("enter");
+    }, { once: true });
   }
   function chooseOption(idx, opt) {
     if (quizLocked) return; // 防重复点击/穿透，避免跳题或重来
@@ -152,6 +157,10 @@
     answers.push(opt);
     const reply = opt.reply || "好，记下了~";
 
+    // 先解除入场动画（cardIn 的 fill-mode:both 会锁定 opacity:1，覆盖 dissolve 的过渡目标），
+    // 否则问题卡不会消散。强制重排后再加 .dissolve，让过渡从可见态平滑淡出
+    quizCardEl.classList.remove("enter");
+    void quizCardEl.offsetWidth;
     // 阶段①（t0）：当前问题卡溶解模糊、缓缓上浮消散
     quizCardEl.classList.add("dissolve");
 
