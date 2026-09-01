@@ -12,7 +12,11 @@ Thumbs.db
 # 开发用的源图/探查脚本（不发布）
 scripts/_logo-source.png
 scripts/_*.png
+scripts/_*.js
+scripts/_*.log
 scripts/_probe.py
+
+# 扩展抓取工具（保留，可复跑）：fetch_more.py / fetch_topup.py
 
 # 开发期产物（不发布）
 logo-preview.png

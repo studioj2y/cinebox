@@ -33,24 +33,41 @@
     return { score: s + coverage * 0.6 + ratingBonus, matched, raw: s };
   }
 
-  // 推荐: 返回排序后的 topN。带轻微随机性保证多样性
-  function recommend(answers, movies, opts) {
-    opts = opts || {};
-    const poolSize = opts.poolSize || 8; // 从这个前 N 名里随机挑
-    const W = aggregate(answers);
-    const ranked = movies
-      .map((m) => ({ m, r: scoreMovie(m, W) }))
-      .sort((a, b) => b.r.score - a.r.score);
-
-    // 相关性兜底: 若最优匹配命中标签数过少, 退而求其次用高分经典片
-    const top = ranked.slice(0, poolSize);
-    return top;
+  // 标准正态随机 (Box-Muller)，用于温度扰动
+  function randn() {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
   }
 
-  // 从候选池里挑一部 (加权随机, 偏向高分但有变化)
+  // 推荐: 在"相关片"内做温度扰动排序，扩大可达集合、降低集中度
+  function recommend(answers, movies, opts) {
+    opts = opts || {};
+    const poolSize = opts.poolSize || 16; // 候选池扩大，给"换一部"更多选择
+    const W = aggregate(answers);
+    const scored = movies.map((m) => ({ m, r: scoreMovie(m, W) }));
+    const maxScore = scored.reduce((a, s) => Math.max(a, s.r.score), 0);
+
+    // 相关度门限: 至少命中过标签或达到最高分的 35%，避免完全无关片冒泡
+    const gate = Math.max(1, maxScore * 0.35);
+    const relevant = scored.filter((s) => s.r.matched > 0 && s.r.score >= gate);
+
+    // 温度扰动: 每次调用给相关片加不同噪声，让不同相关片轮流进入候选池
+    const T = Math.max(2, maxScore * 0.55);
+    relevant.forEach((s) => { s.perturbed = s.r.score + randn() * T; });
+    relevant.sort((a, b) => b.perturbed - a.perturbed);
+
+    return relevant.slice(0, poolSize).map((s) => ({ m: s.m, r: s.r }));
+  }
+
+  // 从候选池里挑一部 (温度 softmax，偏向高分但更平缓，降低头部集中)
   function pickOne(ranked) {
     if (!ranked.length) return null;
-    const weights = ranked.map((x, i) => Math.max(0.15, (ranked.length - i) / ranked.length));
+    const scores = ranked.map((x) => (x.r ? x.r.score : 0));
+    const maxS = Math.max.apply(null, scores);
+    const T = Math.max(1, maxS * 0.35);
+    const weights = scores.map((s) => Math.exp((s - maxS) / T));
     const sum = weights.reduce((a, b) => a + b, 0);
     let r = Math.random() * sum;
     for (let i = 0; i < weights.length; i++) {
