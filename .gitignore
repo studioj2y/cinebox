@@ -28,3 +28,4 @@ reference-branding.jpg
 
 # 根目录临时探查脚本（不发布）
 _*.mjs
+_*.py

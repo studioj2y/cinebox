@@ -207,7 +207,11 @@ body.cursor-on .fx-cursor { opacity: 1; }
 .q-count { color: var(--muted); font-size: 14px; min-width: 40px; text-align: right; letter-spacing: 1px; }
 .ghost {
   pointer-events: auto; background: transparent; border: 1px solid rgba(196,176,230,.3); color: var(--text);
-  padding: 9px 16px; border-radius: 999px; cursor: pointer; font-size: 14px; transition: background .2s, border-color .2s, transform .2s;
+  padding: 10px 18px; border-radius: 999px; cursor: pointer; font-size: 14px;
+  /* 触摸目标最小 44×44（iOS HIG / WCAG 2.5.5 推荐） */
+  min-height: 44px; min-width: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .2s, border-color .2s, transform .2s;
 }
 .ghost:hover { background: rgba(122,78,224,.25); border-color: rgba(196,176,230,.55); transform: translateX(-2px); }
 
@@ -498,6 +502,21 @@ body.cursor-on .fx-cursor { opacity: 1; }
   .hero-logo { width: 200px; height: auto; opacity: 0.9; margin-bottom: -38px; }
   .brand-mark { font-size: 10px; letter-spacing: 3px; }
   .summary-line { font-size: 19px; }
+}
+/* ---------- 中间断点：平板/小屏笔记本（621–1024px） ---------- */
+/* 介于大屏桌面与竖屏手机之间：海报+信息并排但整体收一档，避免卡片过宽留白 */
+@media (min-width: 621px) and (max-width: 1024px) {
+  .result-wrap { padding: 34px 18px 60px; gap: 28px; }
+  .result-poster { width: 240px; height: 360px; }
+  .result-info { max-width: 420px; min-width: 280px; }
+  #rTitle { font-size: 30px; }
+  .quiz-wrap { max-width: 640px; padding: 30px 18px 56px; }
+  .hero-logo { width: 260px; margin-bottom: -42px; }
+  .tagline { font-size: 16px; margin: 14px 0 24px; }
+  .ghost { padding: 9px 16px; } /* 此区间按钮文字略收一档，触摸目标仍由基础 min-height:44 保证 */
+  #qText { font-size: 22px; }
+  .r-actions { gap: 10px; }
+  .ai-prompt { font-size: 15px; padding: 20px 22px 22px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .fx-aurora::before, .fx-aurora::after, .hero h1, .marquee-track, .result-poster, .result-poster::after,

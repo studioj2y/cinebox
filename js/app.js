@@ -87,6 +87,14 @@
 
   /* ---------------- 答题 ---------------- */
   const QUIZ_N = 5;
+  /* 题目分类的展示名：category 是内部分类（粒度/隐喻/阶段等直接外露会让用户困惑），
+   * 这里映射成用户看得懂的短标签，仅用于界面显示，不影响任何匹配逻辑。 */
+  const CAT_LABEL = {
+    心情: "此刻心情", 体验: "想被怎样", 目的: "想要什么", 陪伴: "和谁一起",
+    偏好: "口味", 题材: "类型", 精力: "电量", 性格: "性格",
+    阶段: "近况", 粒度: "强度", 隐喻: "打个比方", 时间: "时段",
+    情怀: "新旧", 夜生活: "深夜",
+  };
   let quizQs = [];
   let answers = [];
   let ranked = [];
@@ -152,7 +160,7 @@
     if (ghostLayerEl) ghostLayerEl.innerHTML = ""; // 清掉上一题残留的「幽灵」回复
     const q = quizQs[idx];
     $("#qIdx").innerHTML = '第 <b>' + (idx + 1) + '</b> / ' + QUIZ_N + ' 题';
-    $("#qCat").textContent = q.category || "";
+    $("#qCat").textContent = CAT_LABEL[q.category] || q.category || "";
     $("#qText").textContent = q.question;
     $("#qNow").textContent = idx + 1;
     $("#qTotal").textContent = QUIZ_N;
@@ -253,7 +261,7 @@
     const pick = window.Match.pickOne(ranked, { tempFactor: 0.05 });
     current = pick ? pick.m : null;
     if (!current) {
-      alert("片库为空，请先运行 scripts/fetch_movies.py 生成数据。");
+      alert("今晚的片库似乎空了，刷新一下页面再试吧。");
       return;
     }
     renderResult();
@@ -271,6 +279,7 @@
     const fb = $("#rFallback");
     if (m.poster) {
       img.src = m.poster;
+      img.alt = (m.title || "电影") + " 海报"; // 无障碍：读屏软件可播报片名
       img.decoding = "async";
       img.style.display = "block";
       fb.classList.remove("show");
@@ -394,7 +403,8 @@
     if (!text) {
       // 空 / 全部失败：温柔话术，提示可再次点击重新生成
       pre.classList.remove("loading", "typing");
-      pre.textContent = "心灵太封闭了，深呼吸，我再看一次。\n（点「✦ 不良有话说」再试一回）";
+      // 失败多因服务端限流/超时，与用户无关——文案不能变成对用户的指责
+      pre.textContent = "刚才没接住，怪我。\n再点一次「✦ 不良有话说」，我重新说。";
       aiLoading = false;
       revealQR();
       return;
@@ -416,7 +426,7 @@
     const btn = $("#posterBtn");
     if (btn.disabled) return;
     const m = current;
-    if (!m) { alert("还没有选出电影，先完成测试吧~"); return; }
+    if (!m) { alert("先答完那几道题，才能生成你的专属海报。"); return; }
     const W = window.Match.aggregate(answers);
     const rating = (m.tmdb_rating || m.rating) ? "TMDB ★ " + (m.tmdb_rating || m.rating) : "";
     const tags = window.Match.topTags(m, W, 5).map((t) => "#" + t).join("  ");
@@ -463,7 +473,7 @@
         </div>
         <div style="text-align:center;margin:0 15px;">
           <img src="images/qrcode-domain.png" style="width:130px;height:130px;border-radius:10px;background:#fff;padding:6px;box-sizing:border-box;" />
-          <div style="font:13px/1.45 system-ui;color:#b6d4ff;margin-top:8px;">我也要测 <b style="color:#ff5e9c;">不良陪你选电影</b><br/>生成我的专属海报</div>
+          <div style="font:13px/1.45 system-ui;color:#b6d4ff;margin-top:8px;">我也来挑一部 <b style="color:#ff5e9c;">不良陪你选电影</b><br/>生成我的专属海报</div>
         </div>
       </div>
       <div style="text-align:center;font:12px system-ui;color:#8a6f99;padding:12px 0 20px;">CINEBOX · 不良少女放映组</div>
@@ -502,7 +512,7 @@
       }
       return new Promise((r) => setTimeout(r, 250));
     }).then(() => {
-      if (typeof html2canvas === "undefined") throw new Error("海报组件未加载（请检查网络后重试）");
+      if (typeof html2canvas === "undefined") throw new Error("海报组件没加载成功");
       return html2canvas(root, { useCORS: true, backgroundColor: "#140b1c", scale: 2, logging: false });
     }).then((canvas) => {
       // 不触发下载：转成 dataURL 直接渲染成 <img>，便于手机/微信长按保存或分享
@@ -514,7 +524,7 @@
       area.scrollIntoView({ behavior: "smooth", block: "end" });
       btn.textContent = "📸 重新生成海报";
     }).catch((e) => {
-      statusEl.textContent = "海报生成失败：" + (e && e.message ? e.message : e) + "（可重试）";
+      statusEl.textContent = "海报没能生成出来，再点一次试试（" + (e && e.message ? e.message : e) + "）";
       statusEl.className = "poster-status error";
     }).finally(() => {
       root.remove();

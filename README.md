@@ -30,7 +30,7 @@ movie-mood/
 需要本地服务器时：`python -m http.server` 后访问 `http://127.0.0.1:8000`。
 
 ## 重新拉取电影数据（需你的 TMDB key）
-`data/movies.js` 已含 439 部真实片单与本地海报，通常无需重跑。
+`data/movies.js` 已含 540 部真实片单与本地海报，通常无需重跑。
 如需刷新：
 1. 准备 key：https://www.themoviedb.org/settings/api （免费）。
 2. 设置 key（二选一，均不会被提交）：
