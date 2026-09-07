@@ -773,7 +773,7 @@ def reply_for(question, opt_text, tags):
         if tag in tone:
             return tone[tag]
     # ---- 3) 兜底 ----
-    return "好，记下了~"
+    return "好，记下了。"
 
 
 def build():
