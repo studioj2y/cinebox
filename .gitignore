@@ -22,3 +22,9 @@ scripts/_probe.py
 logo-preview.png
 preview-LOGO.png
 reference-branding.jpg
+
+# 数据/代码改动前的回滚备份（不发布）
+*.bak
+
+# 根目录临时探查脚本（不发布）
+_*.mjs

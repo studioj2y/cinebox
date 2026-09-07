@@ -105,8 +105,36 @@
     }
     return a;
   }
+  /* 分层抽样：原先是 shuffle(QUESTIONS).slice(0,5) 纯随机，
+   * 实测 18.2% 的轮次一道核心题都抽不到（55.9% 只有 ≤1 道），
+   * 整轮问卷全是弱信号，加权重也救不回来。
+   * 改为按档位配额抽取 5 = 核心×2 + 重要×2 + 点缀×1，
+   * 保证每轮都有核心信号，同时保留点缀题的惊喜感。 */
+  function pickStratified(list, n) {
+    const tierOf = (window.Match && window.Match.tierOf) || (() => 1);
+    const tiers = { 3: [], 2: [], 1: [] };
+    list.forEach((q) => tiers[tierOf(q.category)].push(q));
+    // 配额按 n 缩放：核心 40% / 重要 40% / 点缀 20%（QUIZ_N=5 时为 2/2/1）
+    const q3 = Math.max(1, Math.round(n * 0.4));
+    const q1 = Math.max(1, Math.floor(n * 0.2));
+    const quota = { 3: q3, 2: Math.max(0, n - q3 - q1), 1: q1 };
+    const picked = [];
+    [3, 2, 1].forEach((t) => {
+      shuffle(tiers[t]).slice(0, quota[t]).forEach((q) => picked.push(q));
+    });
+    // 某档题量不足时用其余题补足（题库变动时的兜底）
+    if (picked.length < n) {
+      const rest = shuffle(list.filter((q) => picked.indexOf(q) < 0));
+      while (picked.length < n && rest.length) picked.push(rest.shift());
+    }
+    return shuffle(picked).slice(0, n); // 打乱顺序，避免档位顺序被用户察觉
+  }
+
   function startQuiz() {
-    quizQs = shuffle(QUESTIONS).slice(0, QUIZ_N);
+    quizQs = pickStratified(QUESTIONS, QUIZ_N);
+    // 把题目标注到选项上（选项对象随题目独立，无共享副作用），
+    // 供 Match.aggregate 按档位加权；answers.push(opt) 即自动携带
+    quizQs.forEach((q) => q.options.forEach((o) => (o._cat = q.category)));
     answers = [];
     quizLocked = false;
     quizCardEl = $("#quizCard");
@@ -221,7 +249,8 @@
     pickResult();
   }
   function pickResult() {
-    const pick = window.Match.pickOne(ranked);
+    // 首次揭晓: 低温，给出最匹配的那部，让 5 道题的答案真正决定结果
+    const pick = window.Match.pickOne(ranked, { tempFactor: 0.05 });
     current = pick ? pick.m : null;
     if (!current) {
       alert("片库为空，请先运行 scripts/fetch_movies.py 生成数据。");
@@ -280,10 +309,10 @@
   $("#backBtn").onclick = () => show("wall");
   $("#retestBtn").onclick = startQuiz;
   $("#againBtn").onclick = () => {
-    // 换一部: 从候选池里挑一个不同于当前的
+    // 换一部: 从候选池里挑一个不同于当前的（高温，保证点下去有明显变化）
     const others = ranked.filter((x) => x.m !== current);
     const pool = others.length ? others : ranked;
-    const pick = window.Match.pickOne(pool);
+    const pick = window.Match.pickOne(pool, { tempFactor: 0.3 });
     current = pick ? pick.m : current;
     renderResult();
   };
