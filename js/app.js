@@ -321,7 +321,7 @@
     // 换一部: 从候选池里挑一个不同于当前的（高温，保证点下去有明显变化）
     const others = ranked.filter((x) => x.m !== current);
     const pool = others.length ? others : ranked;
-    const pick = window.Match.pickOne(pool, { tempFactor: 0.3 });
+    const pick = window.Match.pickOne(pool, { tempFactor: 0.2 });
     current = pick ? pick.m : current;
     renderResult();
   };
