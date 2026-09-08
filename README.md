@@ -11,11 +11,12 @@ movie-mood/
 │  ├─ match.js         模糊匹配 + 推荐理由 + AI 解读提示词
 │  └─ app.js           海报墙渲染 / 答题流程 / 结果交互 / agnes 调用
 ├─ data/
-│  ├─ movies.js        window.MOVIES（540 部电影元数据 + 标签 + 本地海报路径）
-│  └─ questions.js     window.QUESTIONS（137 道性格/心情/状态题，含答案权重）
+│  ├─ movies.js        window.MOVIES（540 部电影元数据 + 标签 + 本地海报路径，已剔除简介）
+│  ├─ questions.js     window.QUESTIONS（137 道性格/心情/状态题，含答案权重）
+│  └─ overviews.js     window.OVERVIEWS（522 条影片简介，首屏后按需预载，占 245KB）
 ├─ api/
-│  ├─ _lib/core.js     多 provider 轮转 + KV 缓存（可选降级）
-│  └─ interpret.js     Vercel Serverless：/api/interpret
+│  ├─ _lib/core.js     多 provider 轮转 + KV 缓存 + **按 IP 限流** + 片库白名单
+│  └─ interpret.js     Vercel Serverless：/api/interpret（限流与输入校验的入口）
 ├─ images/
 │  ├─ logo-silhouette.png   白色剪影 LOGO
 │  └─ posters/         540 张本地压缩海报（随仓库提交）
@@ -69,6 +70,45 @@ movie-mood/
 - 本地开发：复制 `.env.example` 为 `.env` 填入 key，再 `node dev-server.mjs`。
 - 前端已兜底：即便接口异常，也会回退展示已构造好的提示词，不会白屏。
 
+### ⚠️ /api/interpret 的安全基线（勿删）
+
+该端点**完全公开**，早期版本没有任何防护，任何人循环调用即可耗尽 API 额度
+（且缓存 key 为 `md5(movieId+answers)`，改一个答案就能绕过缓存）。现按顺序做四层校验，写在 `api/interpret.js`：
+
+1. **按 IP 双窗口限流**：10 次/分钟、50 次/天。优先用 Vercel KV（跨实例共享，能挡分布式刷量），未配置时降级为内存计数。超限返回 `429` + `Retry-After`。
+2. **body 大小上限** 64KB：边读边判，超限直接 `413`。
+3. **prompt 长度上限** 2000 字符（正常提示词约 600~900）。
+4. **movieId 必须在片库内**：防止伪造 id 制造无限种缓存 key。读不到片库时自动跳过校验，可用性优先。
+
+`dev-server.mjs` **直接复用同一个 handler**（通过 `asVercelRes()` 补上 Vercel 特有的 `res.status()/json()`），
+所以本地能真实测到限流——不要改回「本地单独调 `core.interpret()`」的写法，那会导致本地测不出问题、线上才暴露。
+
+## 首屏体积与按需加载
+
+首屏同步 JS 从 **831KB 降到 395KB（-53%）**，做法是只把必需的东西留在关键路径上：
+
+| 资源 | 大小 | 何时加载 |
+|---|---|---|
+| `movies.js` | 272KB（原 520KB） | 首屏必需 |
+| `questions.js` | 79KB | 首屏必需 |
+| `app.js` + `match.js` | 约 42KB | 首屏必需 |
+| `overviews.js` | 245KB | 首屏就绪后 `requestIdleCallback` 预载，答题期间就补齐 |
+| `html2canvas.min.js` | 194KB | 仅点「生成海报」时注入 |
+
+- 影片简介（`overview`）是中文，UTF-8 下 245KB，占原 `movies.js` 的 47%，拆分后 `movies.js` 直接减半。
+- 缓存策略见 `vercel.json`：海报/favicon/OG 图加了长期 `immutable` 缓存；
+  **CSS/JS 故意不加**，因为文件名没有 hash，加了会导致用户拿不到更新（需硬刷新）。
+  若将来要给 CSS/JS 上长缓存，请先引入带 hash 的文件名或版本查询串。
+
+## 深链分享
+
+结果页支持 `?m=<影片id>`，例如 `https://cinebox.studioj2y.icu/?m=10098`。
+朋友点开直接看到那部片 + 「为什么是它」，不必再靠截图传播。
+
+- 无答题记录时，推荐理由改用**影片自身标签**作权重，仍能说出片子气质（不会走空兜底）。
+- 此时隐藏「生成海报」与「AI 解读」（都依赖用户的 5 个答案），并把「换一部」改成「我也要测 →」，把访客导入正常流程。
+- 无效 id 静默回落到首页，不打扰访客。
+
 ## 部署状态
 
 | 项 | 值 |
@@ -89,7 +129,7 @@ git status
 
 # ② 按文件添加（不要用 git add . ，避免误提交备份与临时脚本）
 git add index.html css/style.css js/match.js js/app.js
-git add data/movies.js data/questions.js
+git add data/movies.js data/questions.js data/overviews.js
 git add api/ scripts/ dev-server.mjs server.mjs vercel.json
 git add README.md .gitignore package.json
 

@@ -106,8 +106,9 @@
   <script src="data/movies.js"></script>
   <script src="data/questions.js"></script>
   <script src="js/match.js"></script>
-  <!-- 自托管：原从 cdnjs 加载，国内常拉不到导致「生成分享海报」直接失败 -->
-  <script src="js/html2canvas.min.js"></script>
+  <!-- html2canvas 不在此处引入：仍有 194KB，但只有点「生成海报」才需要，
+       由 js/app.js 的 loadHtml2Canvas() 在点击时按需注入，首屏可减少 194KB。
+       自托管的原因不变：原从 cdnjs 加载，国内常拉不到导致海报生成直接失败。 -->
   <script src="js/app.js"></script>
 </body>
 </html>

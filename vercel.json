@@ -2,5 +2,25 @@
   "version": 2,
   "functions": {
     "api/interpret.js": { "maxDuration": 30 }
-  }
+  },
+  "headers": [
+    {
+      "source": "/images/posters/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/favicon.ico",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400" }
+      ]
+    },
+    {
+      "source": "/images/og-cover.png",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400" }
+      ]
+    }
+  ]
 }

@@ -139,6 +139,15 @@
   }
 
   function startQuiz() {
+    // 从深链（?m=id）进入时，海报与 AI 解读按钮被隐藏、「换一部」被改成「我也要测」。
+    // 一旦开始正式答题就恢复正常模式，否则答完题仍看不到这些按钮。
+    const pb = $("#posterBtn");
+    const ab = $("#aiBtn");
+    const gb = $("#againBtn");
+    if (pb) pb.hidden = false;
+    if (ab) ab.hidden = false;
+    if (gb) gb.textContent = "换一部 ↻";
+
     quizQs = pickStratified(QUESTIONS, QUIZ_N);
     // 把题目标注到选项上（选项对象随题目独立，无共享副作用），
     // 供 Match.aggregate 按档位加权；answers.push(opt) 即自动携带
@@ -274,7 +283,9 @@
   }
   function renderResult() {
     const m = current;
-    const W = window.Match.aggregate(answers);
+    // 深链（?m=id）进入时没有答题记录，W 会是空对象、推荐理由只能走兜底；
+    // 此时改用影片自身的标签作为权重，让「为什么是它」依然能说出片子本身的气质。
+    const W = answers.length ? window.Match.aggregate(answers) : (m.tags || {});
     const img = $("#rPoster");
     const fb = $("#rFallback");
     if (m.poster) {
@@ -294,7 +305,13 @@
     renderRatings(m);
     const tags = window.Match.topTags(m, W, 5);
     $("#rTags").innerHTML = tags.map((t) => `<span>${t}</span>`).join("");
-    $("#rOverview").textContent = m.overview || "";
+    $("#rOverview").textContent = overviewOf(m);
+    // 预载尚未完成时先留空，加载好再补上（失败则保持空白，不影响其余内容）
+    if (!window.OVERVIEWS) {
+      loadOverviews()
+        .then(() => { if (current === m) $("#rOverview").textContent = overviewOf(m); })
+        .catch(() => {});
+    }
     $("#rReason").textContent = window.Match.buildReason(m, W);
     const pre = $("#aiPrompt");
     pre.classList.remove("show");
@@ -318,6 +335,12 @@
   $("#backBtn").onclick = () => show("wall");
   $("#retestBtn").onclick = startQuiz;
   $("#againBtn").onclick = () => {
+    // 深链进入（?m=id，没答过题）时没有候选池，此时按钮已改文案为「我也要测」，
+    // 点它就该走完整答题流程，而不是试图从空池里换一部。
+    if (!quizQs.length || !ranked || !ranked.length) {
+      startQuiz();
+      return;
+    }
     // 换一部: 从候选池里挑一个不同于当前的（高温，保证点下去有明显变化）
     const others = ranked.filter((x) => x.m !== current);
     const pool = others.length ? others : ranked;
@@ -338,6 +361,8 @@
     if (aiLoading) return; // 防重复点击/并发，避免重复请求
     aiLoading = true;
     const answersText = quizQs.map((q, i) => `${i + 1}. ${q.question} → ${answers[i] ? answers[i].text : ""}`).join("\n");
+    // 提示词里要带影片简介，先确保它已就位；加载失败也让流程继续，只是简介缺失
+    try { await loadOverviews(); } catch (e) { /* 降级：不带简介也要能解读 */ }
     const prompt = window.Match.buildInterpretPrompt(answersText, current);
     const pre = $("#aiPrompt");
     const qrCta = $("#qrCta");
@@ -422,6 +447,66 @@
      新布局（竖向海报风）：头部 → 问答回顾 → 电影海报（居中放大，作视觉主体）→ 电影信息在海报下方罗列（片名/年份类型/评分/标签/不良推荐+理由）→ 双二维码 → 页脚
      微信/手机浏览器无法触发文件下载，改为在结果页最下方直接渲染成 <img>，用户可长按保存/分享 */
   $("#posterBtn").onclick = generatePoster;
+
+  /* 影片简介（overview）占 movies.js 体积的近一半（中文，UTF-8 下 244KB，
+   * 占总 520KB 的 47%），但只有结果页展示与 AI 解读提示词用得到。
+   * 已拆到 data/overviews.js：首屏不加载，页面就绪后空闲预载，
+   * 用户答完 5 道题的时间内足够补齐，结果页与 match.js 均无需感知。 */
+  let _ovPromise = null;
+  function loadOverviews() {
+    if (window.OVERVIEWS) return Promise.resolve(window.OVERVIEWS);
+    if (_ovPromise) return _ovPromise;
+    _ovPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "data/overviews.js";
+      s.onload = () => {
+        const ov = window.OVERVIEWS;
+        if (!ov) {
+          _ovPromise = null;
+          reject(new Error("简介加载失败"));
+          return;
+        }
+        // 回填进 MOVIES，让 m.overview 照常可读（match.js 的提示词不用改）
+        (window.MOVIES || []).forEach((m) => {
+          if (ov[m.id] != null) m.overview = ov[m.id];
+        });
+        resolve(ov);
+      };
+      s.onerror = () => {
+        _ovPromise = null; // 允许重试
+        reject(new Error("简介加载失败"));
+      };
+      document.head.appendChild(s);
+    });
+    return _ovPromise;
+  }
+  function overviewOf(m) {
+    return (window.OVERVIEWS && window.OVERVIEWS[m.id]) || m.overview || "";
+  }
+
+  /* html2canvas 有 194KB，但只有点「生成海报」这一条路径用得到。
+   * 原先在 index.html 里以 <script> 同步引入，每个访客首屏都要为它付 194KB，
+   * 而真正会点生成海报的是少数人——改为点击时再注入。 */
+  let _h2cPromise = null;
+  function loadHtml2Canvas() {
+    if (window.html2canvas) return Promise.resolve(window.html2canvas);
+    if (_h2cPromise) return _h2cPromise;
+    _h2cPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "js/html2canvas.min.js";
+      s.onload = () =>
+        window.html2canvas
+          ? resolve(window.html2canvas)
+          : reject(new Error("海报组件没加载成功"));
+      s.onerror = () => {
+        _h2cPromise = null; // 允许重试（例如断网后恢复）
+        reject(new Error("海报组件没加载成功"));
+      };
+      document.head.appendChild(s);
+    });
+    return _h2cPromise;
+  }
+
   function generatePoster() {
     const btn = $("#posterBtn");
     if (btn.disabled) return;
@@ -503,7 +588,8 @@
     imgEl.hidden = true;
     area.scrollIntoView({ behavior: "smooth", block: "end" });
 
-    Promise.all(imgs.map(loadImg)).then(() => {
+    // 脚本与图片并行加载：html2canvas 194KB 只在这里才下载
+    Promise.all([loadHtml2Canvas()].concat(imgs.map(loadImg))).then(() => {
       if (cap && !cap.naturalWidth) {
         const fb = document.createElement("div");
         fb.style.cssText = "width:228px;height:329px;border-radius:14px;background:#2a1838;display:flex;align-items:center;justify-content:center;text-align:center;font:600 16px system-ui;color:#d9c4e6;padding:12px;box-sizing:border-box;flex:0 0 auto;";
@@ -536,6 +622,49 @@
 
   /* ---------------- 启动 ---------------- */
   buildWall();
+
+  // 首屏就绪后空闲预载影片简介（244KB，刻意不进首屏关键路径）。
+  // 用 requestIdleCallback 是为了不与海报墙的动画/图片解码抢主线程。
+  const prefetchOverviews = () => loadOverviews().catch(() => {});
+  if (window.requestIdleCallback) requestIdleCallback(prefetchOverviews, { timeout: 4000 });
+  else setTimeout(prefetchOverviews, 1500);
+
+  /* 深链分享：?m=<影片id> 直接落到该片的结果页。
+   * 之前分享只能靠截图，朋友看到图还得自己去搜片名；有了深链，
+   * 一个链接就能把「这部片 + 为什么是它」完整递过去。
+   * 注意：此时没有答题记录，故隐藏依赖答案的海报与 AI 解读，
+   * 并把「换一部」改成「我也要测」，把访客导入正常流程。 */
+  (function handleDeepLink() {
+    let id = null;
+    try {
+      id = new URLSearchParams(location.search).get("m");
+    } catch (e) {
+      return;
+    }
+    if (!id) return;
+    const m = (window.MOVIES || []).find((x) => String(x.id) === String(id));
+    if (!m) return; // 无效 id：静默回落到正常首页，不打扰访客
+    current = m;
+    quizQs = [];
+    answers = [];
+    // 简介可能还没预载完，等它到了再渲染，避免结果页简介空白
+    loadOverviews().catch(() => {}).then(() => {
+      renderResult();
+      show("result");
+      const rw = $(".result-wrap");
+      if (rw) {
+        rw.classList.remove("anim");
+        void rw.offsetWidth;
+        rw.classList.add("anim");
+      }
+    });
+    const posterBtn = $("#posterBtn");
+    const aiBtn = $("#aiBtn");
+    const againBtn = $("#againBtn");
+    if (posterBtn) posterBtn.hidden = true; // 海报含问答回顾，无答案则不提供
+    if (aiBtn) aiBtn.hidden = true;         // AI 解读需要用户的 5 个答案
+    if (againBtn) againBtn.textContent = "我也要测 →";
+  })();
 
   /* 跟随鼠标的辉光 */
   const fxCursor = document.getElementById("fxCursor");

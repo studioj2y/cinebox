@@ -1,6 +1,8 @@
 // core.js — AI 解读服务端核心（与部署形态无关，Vercel 函数与本地 dev-server 共用）
-// 职责：多 key 轮转 + 多提供方故障转移 + 内存缓存。前端不再持有任何 key。
+// 职责：多 key 轮转 + 多提供方故障转移 + 内存缓存 + 限流。前端不再持有任何 key。
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 
 // 提供方注册表：新增提供方只需在此加一项，并在 .env 配对应的 *_API_KEYS 即可
 const PROVIDER_DEFS = {
@@ -100,6 +102,73 @@ async function cacheSet(key, val) {
   }
   if (memCache.size >= CACHE_MAX) memCache.delete(memCache.keys().next().value);
   memCache.set(key, val);
+}
+
+/* ---------------- 限流 ----------------
+ * /api/interpret 是公开端点，早期版本无任何防护：任何人循环 curl 即可消耗 API 额度，
+ * 且缓存 key = md5(movieId+answers)，改一个答案就能绕过缓存。故在此加按 IP 的双窗口限流。
+ * 存储优先 Vercel KV（跨实例共享，真正能挡住分布式刷量）；未配置 KV 时降级为内存计数
+ * （仅挡单实例高频，仍远好过裸奔）。
+ * 额度宽松度按真实使用设定：正常用户一次会话最多点几次「不良有话说」。 */
+const RATE_LIMITS = [
+  { name: "min", window: 60, limit: 10 },        // 10 次 / 分钟
+  { name: "day", window: 86400, limit: 50 },     // 50 次 / 天
+];
+const memHits = new Map(); // key -> { n, exp }
+function memIncr(key, ttl) {
+  const now = Date.now();
+  const rec = memHits.get(key);
+  if (!rec || rec.exp <= now) {
+    memHits.set(key, { n: 1, exp: now + ttl * 1000 });
+  } else {
+    rec.n += 1;
+  }
+  // 防止 Map 无限增长（IP 是有限枚举，但清理成本很低）
+  if (memHits.size > 5000) {
+    for (const [k, v] of memHits) if (v.exp <= now) memHits.delete(k);
+  }
+  return memHits.get(key).n;
+}
+export async function rateCheck(ip) {
+  const stamp = Date.now();
+  for (const rl of RATE_LIMITS) {
+    const bucket = Math.floor(stamp / 1000 / rl.window);
+    const key = `rl:${ip}:${rl.name}:${bucket}`;
+    let n;
+    const k = await getKV();
+    if (k) {
+      try {
+        n = await k.incr(key);
+        if (n === 1) await k.expire(key, rl.window);
+      } catch (e) {
+        n = memIncr(key, rl.window); // KV 抖动 → 降级内存，不因此放行
+      }
+    } else {
+      n = memIncr(key, rl.window);
+    }
+    if (n > rl.limit) {
+      const retryAfter = rl.name === "min" ? 60 : 3600;
+      return { ok: false, scope: rl.name, retryAfter, limit: rl.limit };
+    }
+  }
+  return { ok: true };
+}
+
+/* ---------------- 片库白名单 ----------------
+ * 校验 movieId 确实在片库内，避免用不存在的 id 制造无限种缓存 key 绕过限流/缓存。
+ * 读文件失败（如 Vercel 打包未含 data/）时返回 null → 跳过校验，绝不因此让请求 500。 */
+let _movieIds = undefined;
+export function movieIdSet() {
+  if (_movieIds !== undefined) return _movieIds;
+  try {
+    const p = path.join(process.cwd(), "data", "movies.js");
+    const w = {};
+    new Function("window", fs.readFileSync(p, "utf8"))(w);
+    _movieIds = new Set((w.MOVIES || []).map((m) => String(m.id)));
+  } catch (e) {
+    _movieIds = null; // 读不到就放弃校验，可用性优先
+  }
+  return _movieIds;
 }
 
 const SYSTEM_PROMPT =
