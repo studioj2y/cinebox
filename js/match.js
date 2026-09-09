@@ -37,6 +37,12 @@
     return w >= 3 ? 3 : w >= 2 ? 2 : 1;
   }
 
+  // 评分取值：优先 TMDB 评分（更权威），缺失时回落到自有 rating 字段
+  // 抽成独立函数，避免 (tmdb_rating || rating) 在多处重复、且口径不一致
+  function ratingOf(m) {
+    return m && (m.tmdb_rating != null ? m.tmdb_rating : (m.rating || 0));
+  }
+
   // 把多题答案聚合成总权重向量
   function aggregate(answers) {
     const W = {};
@@ -232,5 +238,5 @@
     ].join("\n");
   }
 
-  global.Match = { aggregate, scoreMovie, recommend, pickOne, buildReason, topTags, buildInterpretPrompt, CATEGORY_WEIGHT, tierOf };
+  global.Match = { aggregate, scoreMovie, recommend, pickOne, buildReason, topTags, buildInterpretPrompt, ratingOf, CATEGORY_WEIGHT, tierOf };
 })(window);

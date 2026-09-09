@@ -513,7 +513,7 @@
     const m = current;
     if (!m) { alert("先答完那几道题，才能生成你的专属海报。"); return; }
     const W = window.Match.aggregate(answers);
-    const rating = (m.tmdb_rating || m.rating) ? "TMDB ★ " + (m.tmdb_rating || m.rating) : "";
+    const rating = window.Match.ratingOf(m) ? "TMDB ★ " + window.Match.ratingOf(m) : "";
     const tags = window.Match.topTags(m, W, 5).map((t) => "#" + t).join("  ");
     const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
