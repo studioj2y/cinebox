@@ -160,7 +160,7 @@ body.cursor-on .fx-cursor { opacity: 1; }
   50% { background-position: 100% 50%; }
 }
 .tagline {
-  color: #f0f2f8; margin: 16px 0 28px; font-size: 17px; opacity: .95; letter-spacing: .5px;
+  color: #f0f2f8; margin: 16px 0 28px; font-size: 17px; line-height: 1.7; opacity: .95; letter-spacing: .5px;
   text-shadow: 0 0 12px rgba(0,0,0,.95), 0 0 26px rgba(0,0,0,.8), 0 2px 8px rgba(0,0,0,.9);
 }
 .hero-step {
@@ -369,7 +369,10 @@ body.cursor-on .fx-cursor { opacity: 1; }
    （.poster-area 的 display:flex 会覆盖 UA 的 [hidden]{display:none}） */
 .poster-area[hidden],
 .poster-status[hidden],
-.poster-img[hidden] { display: none !important; }
+.poster-img[hidden],
+/* .qr-cta 同理：它自身 display:flex，若不显式声明，未点「不良有话说」时
+   二维码就会直接露出来（应在解读完成后才浮现） */
+.qr-cta[hidden] { display: none !important; }
 @keyframes spinDots { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 /* ---------- 总结过渡屏 ---------- */
@@ -502,6 +505,11 @@ body.cursor-on .fx-cursor { opacity: 1; }
   .hero-logo { width: 200px; height: auto; opacity: 0.9; margin-bottom: -38px; }
   .brand-mark { font-size: 10px; letter-spacing: 3px; }
   .summary-line { font-size: 19px; }
+  /* 窄屏答题屏：固定字标(top:50px;left:22px)会压在 sticky 顶部条的「← 返回」上
+     （390px 实测重叠 65×14px）。该屏已有返回/进度/题号三段 chrome，字标只添乱 → 隐藏 */
+  body[data-screen="quiz"] .brand-mark { display: none; }
+  /* 窄屏首屏：标语分两行后单行更短，避免末行只剩 2 个字的孤字行 */
+  .tagline { font-size: 15px; line-height: 1.75; padding: 0 8px; }
 }
 /* ---------- 中间断点：平板/小屏笔记本（621–1024px） ---------- */
 /* 介于大屏桌面与竖屏手机之间：海报+信息并排但整体收一档，避免卡片过宽留白 */

@@ -38,6 +38,8 @@
   function show(name) {
     Object.values(screens).forEach((s) => s.classList.remove("active"));
     screens[name].classList.add("active");
+    // 供 CSS 按屏做适配（如窄屏答题屏隐藏字标，避免压住「← 返回」）
+    document.body.dataset.screen = name;
     if (name !== "wall") window.scrollTo(0, 0);
   }
 
@@ -173,7 +175,9 @@
     $("#qText").textContent = q.question;
     $("#qNow").textContent = idx + 1;
     $("#qTotal").textContent = QUIZ_N;
-    $("#progressBar").style.width = ((idx) / QUIZ_N) * 100 + "%";
+    // 进度条与右侧「第 N/5 题」同语义：都表示"当前在第几题"（第 1 题 = 20%），
+    // 而不是"已完成比例"（那样第 1 题会是 0%，与旁边的 1/5 读法冲突）
+    $("#progressBar").style.width = ((idx + 1) / QUIZ_N) * 100 + "%";
     quizCardEl.classList.remove("dissolve");
     const box = $("#qOptions");
     box.innerHTML = "";
