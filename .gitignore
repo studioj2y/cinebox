@@ -29,3 +29,6 @@ reference-branding.jpg
 # 根目录临时探查脚本（不发布）
 _*.mjs
 _*.py
+
+# 临时 UI 评审截图（不发布）
+_shots/
