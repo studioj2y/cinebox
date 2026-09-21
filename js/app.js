@@ -323,8 +323,11 @@
     // 切到新电影时，重置二维码与打字计时器，避免旧二维码残留
     if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
     pre.classList.remove("typing", "loading");
+    /* 关注二维码常驻结果页：用户可能不做 AI 解读、直接扫码，
+     * 因此不再等「✦ 不良有话说」跑完才浮现（.show 负责淡入）。
+     * 切影片时保留 .show，避免每次「换一部」都重新淡入一次。 */
     const qrCta = $("#qrCta");
-    if (qrCta) { qrCta.classList.remove("show"); qrCta.hidden = true; }
+    if (qrCta) { qrCta.hidden = false; qrCta.classList.add("show"); }
     // 切到新电影时，重置分享海报（避免旧海报/状态残留）
     const pa = $("#posterArea");
     if (pa) { pa.hidden = true; }
@@ -352,9 +355,10 @@
     current = pick ? pick.m : current;
     renderResult();
   };
-  /* 评分徽章：只展示 TMDB 评分（恢复最简状态）。 */
+  /* 评分徽章：只展示 TMDB 评分（恢复最简状态）。取值统一走 Match.ratingOf，
+     避免 tmdb_rating=0 这类边界在各处口径不一致。 */
   function renderRatings(m) {
-    const v = m.tmdb_rating || m.rating;
+    const v = window.Match.ratingOf(m);
     if (v) $("#rRatings").innerHTML = `<span class="rt rt-tmdb">TMDB ★ ${v}</span>`;
     else $("#rRatings").innerHTML = "";
   }
@@ -369,10 +373,7 @@
     try { await loadOverviews(); } catch (e) { /* 降级：不带简介也要能解读 */ }
     const prompt = window.Match.buildInterpretPrompt(answersText, current);
     const pre = $("#aiPrompt");
-    const qrCta = $("#qrCta");
-    // 每次重新点击：先隐藏二维码，等新解读完成后再浮现
-    qrCta.classList.remove("show");
-    qrCta.hidden = true;
+    /* 二维码常驻结果页，这里不再隐藏/重播；解读文本插在它上方，滚到底即可看到最新内容 */
     pre.hidden = false;
     if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
     pre.classList.remove("typing");
@@ -382,16 +383,10 @@
     // 强制把画面拉到最下，确保解读框（在内容下方）立即可见
     requestAnimationFrame(() => { pre.scrollIntoView({ behavior: "smooth", block: "end" }); scrollResultBottom(); });
 
-    // 解读完成（含空态）后浮现二维码，并把窗口钉到底
-    function revealQR() {
-      qrCta.hidden = false;
-      requestAnimationFrame(() => {
-        qrCta.classList.add("show");
-        requestAnimationFrame(() => {
-          qrCta.scrollIntoView({ behavior: "smooth", block: "end" });
-          scrollResultBottom();
-        });
-      });
+    // 解读完成（含空态）后把滚动钉到底，确保最新内容可见
+    // （二维码已常驻，无需再「完成后浮现」）
+    function pinBottom() {
+      scrollResultBottom();
     }
 
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -451,15 +446,15 @@
       // 失败多因服务端限流/超时，与用户无关——文案不能变成对用户的指责
       pre.textContent = "刚才没接住，怪我。\n再点一次「✦ 不良有话说」，我重新说。";
       aiLoading = false;
-      revealQR();
+      pinBottom();
       return;
     }
     // 兜底：无论返回如何，结尾必带「今晚就它了。」（服务端已确保，这里双保险）
     if (!/今晚就它了[。\.！!]?$/.test(text.replace(/\s+$/, ""))) {
       text = text.replace(/\s+$/, "") + "\n\n今晚就它了。";
     }
-    // 逐字打字机呈现（打字过程中每 tick 钉底，确保最新字可见；打完后浮现二维码）
-    typeText(pre, text, revealQR);
+    // 逐字打字机呈现（打字过程中每 tick 钉底，确保最新字可见）
+    typeText(pre, text, pinBottom);
     aiLoading = false;
   };
 

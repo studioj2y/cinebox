@@ -302,7 +302,7 @@ body.cursor-on .fx-cursor { opacity: 1; }
 .reply-ghost.lift { animation: ghostLift .8s cubic-bezier(.4,0,.2,1) forwards; }
 @keyframes ghostLift { to { opacity: 0; transform: translateY(-80px) scale(.97); filter: blur(8px); } }
 
-/* ---------- 二维码关注卡（解读完成后显示） ---------- */
+/* ---------- 二维码关注卡（结果页常驻：不做 AI 解读也该能直接扫码） ---------- */
 .qr-cta {
   margin-top: 22px; padding: 22px 22px 20px;
   background: linear-gradient(165deg, rgba(122,78,224,.10), rgba(255,79,158,.06)), #140a26;
@@ -315,6 +315,10 @@ body.cursor-on .fx-cursor { opacity: 1; }
 .qr-cta.show { opacity: 1; transform: translateY(0); }
 .qr-text {
   color: #ece4ff; font-size: 15px; line-height: 1.7; letter-spacing: .5px; text-align: center;
+  /* 窄屏换行时只在标点处断行，避免末行只剩「影。」这类孤字；
+     overflow-wrap 兜底：若某段中文长到一行放不下，仍允许紧急折行而不溢出 */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 .qr-hl { color: var(--accent); font-weight: 700; }
 .qr-img-wrap {
@@ -370,8 +374,9 @@ body.cursor-on .fx-cursor { opacity: 1; }
 .poster-area[hidden],
 .poster-status[hidden],
 .poster-img[hidden],
-/* .qr-cta 同理：它自身 display:flex，若不显式声明，未点「不良有话说」时
-   二维码就会直接露出来（应在解读完成后才浮现） */
+/* .qr-cta 同理：它自身 display:flex，若不显式声明，UA 的 [hidden] 会被它覆盖。
+   该卡现已改为结果页常驻（不再由 JS 隐藏），这条规则作为防御保留——
+   否则将来若有人给它加回 hidden，会重演「属性隐藏但视觉可见」的问题。 */
 .qr-cta[hidden] { display: none !important; }
 @keyframes spinDots { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
