@@ -35,6 +35,13 @@ const PROVIDER_DEFS = {
     path: "/chat/completions",
     keys: ["GEMINI_API_KEYS", "GEMINI_API_KEY"],
     auth: (k) => "Bearer " + k,
+    /* Gemini 3.x 是**思考模型，思考无法关闭**，而思考 token 与正文共享 max_tokens：
+     * 若预算被思考吃光，content 会是空串/极短 ⇒ 命中下面的 MIN_LEN 判空。
+     * 需要压思考时把 GEMINI_REASONING_EFFORT 设成 minimal / low（缺省不传，用模型默认）。 */
+    extra: () => {
+      const e = (process.env.GEMINI_REASONING_EFFORT || "").trim().toLowerCase();
+      return e ? { reasoning_effort: e } : {};
+    },
   },
   openai: {
     label: "OpenAI",
@@ -110,14 +117,19 @@ function buildTiers() {
 }
 
 /* ---------------- 超时与时间预算 ----------------
- * 两个必须配合的硬约束：
- *   ① vercel.json 里 api/interpret.js 的 maxDuration = 30s —— 超过会被平台掐断（504）；
- *   ② 前端 fetch 超时（js/app.js）必须**大于**这里的总预算，否则后端还在降级、前端已 abort。
- * 因此：单提供方超时 AI_TIMEOUT_MS（默认 15s，agnes 拖着不回就及时切 gemini），
- *       整体预算 AI_BUDGET_MS（默认 26s，给 Vercel 的 30s 留 4s 余量）。
+ * 四个数字必须**同调**，改一个就要回头看其余三个：
+ *   ① AI_TIMEOUT_MS  单提供方最长等待（默认 25s）
+ *   ② AI_BUDGET_MS   整个请求的总预算（默认 45s）
+ *   ③ vercel.json 的 maxDuration = 60s —— 超过会被平台掐断（504），故 ② < ③
+ *   ④ 前端 fetch 超时（js/app.js，70s）必须**大于** ②，否则后端还在降级、前端已 abort
+ *
+ * 为什么把单家从 15s 放宽到 25s（2026-09-21）：
+ *   线上出现「十几秒后失败、再试又成功」的间歇性故障 —— 十几秒正好是原来的 15s 上限。
+ *   根因是 **Gemini 3.x 属于思考模型（思考无法关闭）**，同一 prompt 的耗时波动很大，
+ *   15s 会在"其实快成功了"的时刻把它掐掉。宁可让失败慢一点，也不要制造假失败。
  * 每次实际请求的超时 = min(单提供方超时, 剩余预算)；剩余不足 MIN_SLOT 就不再开新提供方。 */
-const PER_TIMEOUT = Math.max(1000, Number(process.env.AI_TIMEOUT_MS) || 15000);
-const BUDGET_MS = Math.max(2000, Number(process.env.AI_BUDGET_MS) || 26000);
+const PER_TIMEOUT = Math.max(1000, Number(process.env.AI_TIMEOUT_MS) || 25000);
+const BUDGET_MS = Math.max(2000, Number(process.env.AI_BUDGET_MS) || 45000);
 const MIN_SLOT = 1200;
 
 // 层内轮转游标：每次请求从下一个 key 开始，使同提供方的多 key 真正分摊流量
@@ -145,11 +157,14 @@ async function callOnce(def, apiKey, prompt, timeoutMs) {
       body: JSON.stringify({
         model: def.model(),
         temperature: 0.8,
-        max_tokens: 900,
+        // 2048 而非 900：这是**上限**不是目标长度，正常回答不会变长；
+        // 但思考模型（Gemini 3.x）的思考 token 与正文共享这个额度，900 可能被思考吃光。
+        max_tokens: 2048,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: prompt },
         ],
+        ...(def.extra ? def.extra() : {}),
       }),
     });
     if (!resp.ok) throw new Error(`${def.label} HTTP ${resp.status}`);
@@ -159,8 +174,18 @@ async function callOnce(def, apiKey, prompt, timeoutMs) {
     } catch (e) {
       throw new Error(`${def.label} 返回解析失败（疑似截断）`);
     }
-    const t = ((data.choices && data.choices[0] && data.choices[0].message.content) || "").trim();
-    if (t.length < MIN_LEN) throw new Error(`${def.label} 返回过短或为空`);
+    const ch = (data.choices && data.choices[0]) || {};
+    const msg = ch.message || {};
+    const t = String(msg.content || "").trim();
+    if (t.length < MIN_LEN) {
+      /* 别只说「过短」——把可判定的线索带上，否则线上只能看到一句无从下手的报错。
+       * 典型：finish_reason=length 且 completion_tokens 已用满 ⇒ 额度被思考/被截断吃光。 */
+      const bits = [`${t.length} 字`];
+      if (ch.finish_reason) bits.push(`finish_reason=${ch.finish_reason}`);
+      if (data.usage && data.usage.completion_tokens != null) bits.push(`completion_tokens=${data.usage.completion_tokens}`);
+      if (msg.reasoning_content) bits.push("返回了 reasoning_content（思考内容与正文分开，疑似思考占满额度）");
+      throw new Error(`${def.label} 返回过短或为空（${bits.join("，")}）`);
+    }
     return t;
   } catch (e) {
     if (e && e.name === "AbortError") {

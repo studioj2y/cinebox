@@ -11,6 +11,7 @@
  * 悄悄坏掉、又很难用真 key 复现的部分。这里把 8 种配置组合全部钉死。
  */
 import http from "http";
+import fs from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
 
@@ -25,6 +26,9 @@ const state = {
   gemini: "ok",
 };
 
+// 记录各提供方最近一次收到的请求体（用于参数归属断言）
+const lastReq = { agnes: null, gemini: null };
+
 const LONG_TEXT =
   "这是一段用于自检的解读文本，长度足以通过最短长度校验，用来模拟模型正常返回内容。";
 
@@ -35,6 +39,8 @@ const server = http.createServer(async (req, res) => {
 
   let body = "";
   for await (const c of req) body += c;
+  // 记下收到的请求体，供「参数只发给该发的人」这类断言使用
+  try { lastReq[who] = JSON.parse(body || "{}"); } catch (e) { lastReq[who] = null; }
 
   if (mode === "slow") await sleep(8000);
 
@@ -288,6 +294,47 @@ console.log("CINEBOX AI 降级自检（全部走本地 mock，无外部请求）
   }
   check("错误只归因 Agnes，不出现假 Gemini 失败", /Agnes: HTTP 500/.test(msg) && !/Gemini/.test(msg), msg);
   state.agnes = "ok";
+}
+
+/* ---- 14. 提供方专属参数不得串味（Gemini 的 reasoning_effort 不能发给 Agnes） ---- */
+{
+  console.log("\n[14] GEMINI_REASONING_EFFORT 只作用于 Gemini，不污染 Agnes");
+  state.agnes = "http500"; // 让 Agnes 失败，好把 Gemini 也走到
+  state.gemini = "ok";
+  const { interpret } = await loadCore({
+    AGNES_API_KEYS: "a1", AGNES_BASE: BASE + "/agnes",
+    GEMINI_API_KEY: "g1", GEMINI_BASE: BASE + "/gemini",
+    GEMINI_REASONING_EFFORT: "low",
+  });
+  const r = await interpret({ ...REQ, movieId: "test-14" });
+  check("降级到 gemini", r.provider === "gemini", "实际 " + r.provider);
+  check("Gemini 请求带 reasoning_effort=low", lastReq.gemini && lastReq.gemini.reasoning_effort === "low", JSON.stringify(lastReq.gemini && lastReq.gemini.reasoning_effort));
+  check("Agnes 请求**不含**该参数", !!lastReq.agnes && lastReq.agnes.reasoning_effort === undefined, JSON.stringify(lastReq.agnes && Object.keys(lastReq.agnes)));
+  check("max_tokens 已放宽到 2048（给思考留余量）", lastReq.gemini && lastReq.gemini.max_tokens === 2048, String(lastReq.gemini && lastReq.gemini.max_tokens));
+  state.agnes = "ok";
+}
+
+/* ---- 15. 超时「四件套」必须同调（静态检查，防止改一个忘一个） ----
+ * 约束链：AI_TIMEOUT_MS ≤ AI_BUDGET_MS < Vercel maxDuration < 前端 fetch 超时
+ * 任何一环失配都会造成隐蔽故障：
+ *   · 前端 < 后端预算 ⇒ 后端还在降级、前端已 abort，降级白做；
+ *   · 后端预算 ≥ maxDuration ⇒ 函数被平台掐断，用户拿到 504。 */
+{
+  console.log("\n[15] 超时四件套同调（core.js ≤ vercel.json < app.js）");
+  const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
+  const numOf = (src, re) => { const m = src.match(re); return m ? Number(m[1]) : null; };
+
+  const perTimeout = numOf(read("api/_lib/core.js"), /AI_TIMEOUT_MS\)\s*\|\|\s*(\d+)/);
+  const budget = numOf(read("api/_lib/core.js"), /AI_BUDGET_MS\)\s*\|\|\s*(\d+)/);
+  const maxDuration = JSON.parse(read("vercel.json")).functions["api/interpret.js"].maxDuration * 1000;
+  const fetchTimeout = numOf(read("js/app.js"), /ctrl\.abort\(\),\s*(\d+)/);
+
+  console.log(`   单家=${perTimeout}ms  总预算=${budget}ms  maxDuration=${maxDuration}ms  前端=${fetchTimeout}ms`);
+  check("四个数字都解析到了", [perTimeout, budget, maxDuration, fetchTimeout].every((n) => Number.isFinite(n) && n > 0));
+  check("单家超时 ≤ 总预算", perTimeout <= budget, `${perTimeout} vs ${budget}`);
+  check("总预算 < Vercel maxDuration", budget < maxDuration, `${budget} vs ${maxDuration}`);
+  check("Vercel maxDuration < 前端 fetch 超时", maxDuration < fetchTimeout, `${maxDuration} vs ${fetchTimeout}`);
+  check("单家超时 ≥ 20s（给思考模型留余量）", perTimeout >= 20000, String(perTimeout));
 }
 
 console.log(`\n${failCount === 0 ? "\x1b[32m" : "\x1b[31m"}结果：${pass} 通过 / ${failCount} 失败\x1b[0m`);

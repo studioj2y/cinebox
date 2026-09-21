@@ -1,7 +1,7 @@
 {
   "version": 2,
   "functions": {
-    "api/interpret.js": { "maxDuration": 30 }
+    "api/interpret.js": { "maxDuration": 60 }
   },
   "headers": [
     {

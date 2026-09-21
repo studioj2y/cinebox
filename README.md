@@ -78,7 +78,10 @@ movie-mood/
 - ⚠️ 全局变量 `API_KEYS` 只在某家没配自己的 key 时给**第一层**兜底（聚合网关场景）；**第二层不会继承**它，以免出现「只配了一张 Agnes 的 key，Gemini 层却显示 ready」的假兜底。本项目用不到它，Vercel 里若有这个变量建议删掉。
 - Agnes：`AGNES_API_KEYS`（逗号分隔多 key 轮转，同提供方内分摊）/ `AGNES_MODEL`（默认 `agnes-2.5-flash`）。
 - Gemini：`GEMINI_API_KEY`（Google AI Studio 的 key）/ `GEMINI_MODEL`（默认 `gemini-2.5-flash`，**必须填 Gemini 真实模型名**）。走 Google 官方的 OpenAI 兼容端点，故复用同一套请求/解析逻辑。
-- 时间预算：单提供方 `AI_TIMEOUT_MS`（默认 15s）到点即换下一家；整体 `AI_BUDGET_MS`（默认 26s）必须小于 `vercel.json` 的 `maxDuration: 30`，且**前端 fetch 超时（45s）要大于它**，否则后端还在降级、前端已经断开。
+- ⚠️ **Gemini 3.x 是思考模型，且思考无法关闭**，思考 token 与正文共享 `max_tokens`——额度被思考吃光时 `content` 会返回空串。故 `max_tokens` 已从 900 放宽到 2048（这是上限不是目标长度，正常回答不会变长）；若仍报「返回过短或为空」，可设 `GEMINI_REASONING_EFFORT`（可选 `minimal`/`low`/`medium`/`high`）压低思考预算。该参数**只发给 Gemini**，不会污染 Agnes。
+- 排障：`node scripts/probe-gemini.mjs --model gemini-3.1-flash-lite` 打**真实**端点，会先列出该 key 可用的模型 ID（直接验模型名），再复刻应用请求体，并逐个排除 `max_tokens`/思考预算干扰。与 `check-ai.mjs` 的分工是「真端点排障 vs 本地 mock 验逻辑」（前者会消耗极少量额度）。
+- 时间预算（**四个数字必须同调，改一个就回头看其余三个**）：单提供方 `AI_TIMEOUT_MS` 默认 **25s**，到点即换下一家；整体 `AI_BUDGET_MS` 默认 **45s** < `vercel.json` 的 `maxDuration: 60`；前端 fetch 超时 **70s** 要大于总预算，否则后端还在降级、前端已经断开。
+  - 2026-09-21 起单家由 15s 放宽到 25s：线上曾出现「十几秒后失败、再试又成功」的间歇性故障（十几秒正是原来的 15s 上限）。**Gemini 3.x 是思考模型、思考无法关闭**，同一 prompt 耗时波动大，15s 会在"其实快成功了"时把它掐掉。宁可失败慢一点，也不要制造假失败。
 - ✅ **key 不进前端**：走服务端代理，key 配在 Vercel 环境变量，不进仓库、不暴露给用户。
 - 缓存：`@vercel/kv` 可选，未配置环境变量时自动退回内存 Map，不影响功能。
 - 配置位置（两处独立，都要单独配）：**本地** → 项目根 `.env`（`node dev-server.mjs` 启动时自动加载，Node 内置 `loadEnvFile`，不需 dotenv）；**线上** → Vercel 后台 Settings → Environment Variables（`.env` 不会上传，改完需 Redeploy）。
