@@ -5,9 +5,22 @@ import http from "http";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import interpretHandler from "./api/interpret.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
+
+/* 先把 .env 灌进 process.env，**再** import 业务 handler —— 顺序不能反。
+ * core.js 在模块顶层就把 AI_TIMEOUT_MS / AI_BUDGET_MS 固化成常量，
+ * 若 handler 被静态 import 提前求值，.env 里的超时/预算就永远不生效
+ * （各提供方的 key 是调用时读的，不受影响，但两处行为不一致同样难查）。
+ * Node 20.12+ 内置 process.loadEnvFile，不需要 dotenv（本机也没有 node_modules）。 */
+try {
+  process.loadEnvFile(path.join(root, ".env"));
+  console.log("[env] 已加载 .env");
+} catch (e) {
+  console.log("[env] 未找到 .env —— 仅用当前环境变量（可复制 .env.example 为 .env 填入 AI key）");
+}
+const { default: interpretHandler } = await import("./api/interpret.js");
+
 const PORT = process.env.PORT || 3000;
 
 const MIME = {

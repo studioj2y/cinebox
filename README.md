@@ -80,6 +80,7 @@ movie-mood/
 - 时间预算：单提供方 `AI_TIMEOUT_MS`（默认 15s）到点即换下一家；整体 `AI_BUDGET_MS`（默认 26s）必须小于 `vercel.json` 的 `maxDuration: 30`，且**前端 fetch 超时（45s）要大于它**，否则后端还在降级、前端已经断开。
 - ✅ **key 不进前端**：走服务端代理，key 配在 Vercel 环境变量，不进仓库、不暴露给用户。
 - 缓存：`@vercel/kv` 可选，未配置环境变量时自动退回内存 Map，不影响功能。
+- 配置位置（两处独立，都要单独配）：**本地** → 项目根 `.env`（`node dev-server.mjs` 启动时自动加载，Node 内置 `loadEnvFile`，不需 dotenv）；**线上** → Vercel 后台 Settings → Environment Variables（`.env` 不会上传，改完需 Redeploy）。
 - 本地开发：复制 `.env.example` 为 `.env` 填入 key，再 `node dev-server.mjs`。自检：`node scripts/check-ai.mjs`（用本地 mock 验证降级路径，不需要真 key）。
 - 前端已兜底：即便接口异常，也会回退展示已构造好的提示词，不会白屏。
 
