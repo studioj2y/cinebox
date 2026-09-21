@@ -397,11 +397,14 @@
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let text = "";
     let lastErr = "";
-    const MAX = 2; // 服务端已做 key 轮转+提供方故障转移，这里仅作网络层兜底
+    const MAX = 2; // 服务端已做「多提供方分层降级」，这里仅兜网络抖动
+    /* ⚠️ 超时必须**大于**服务端的总时间预算（core.js 的 AI_BUDGET_MS，默认 26s）：
+     * 服务端在 agnes 超时后还要接着试 gemini，若前端先 abort，降级就白做了。
+     * 服务端 26s + 网络与冷启动余量 ⇒ 前端 45s。 */
     for (let attempt = 1; attempt <= MAX; attempt++) {
       try {
         const ctrl = new AbortController();
-        const to = setTimeout(() => ctrl.abort(), 30000); // 30s 超时，避免悬挂
+        const to = setTimeout(() => ctrl.abort(), 45000); // 45s 超时，避免悬挂
         const resp = await fetch("/api/interpret", {
           method: "POST",
           signal: ctrl.signal,
@@ -425,7 +428,17 @@
         break;
       } catch (e) {
         lastErr = e.message;
-        if (attempt < MAX) { pre.textContent = "网络打了个嗝，重新连一下…"; await sleep(1200); continue; }
+        /* 只在**网络层失败**（fetch 抛 TypeError，连接断开等瞬时抖动）时重试一次。
+         * 服务端 HTTP 4xx/5xx 不重试：502 正是「agnes 与 gemini 都不可用」的语义，
+         * 重试只会让用户再等一整个时间预算；而 AbortError（45s 超时）说明后端已卡死，
+         * 更不该重试。前端此时直接给出「再点一次」的引导即可。 */
+        const isNetwork = e && e.name === "TypeError";
+        if (attempt < MAX && isNetwork) {
+          pre.textContent = "网络打了个嗝，重新连一下…";
+          await sleep(1200);
+          continue;
+        }
+        break;
       }
     }
 

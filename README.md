@@ -61,13 +61,26 @@ movie-mood/
 **改完务必跑回归**：`node scripts/verify_match.mjs`
 会对比 `data/movies.js.bak` + `js/match.js.bak`（改动前）与现行版本的关键指标。核心看「首选占比」（越高越准）和「核心档零区分度题目数」（越低越好）。
 
-## AI 解读（已接入 agnes-ai）
-结果页「✦ 不良解读」按钮调用 `/api/interpret`（Vercel Serverless Function），由服务端带 key 转发给 agnes-ai `/v1/chat/completions`（模型 `agnes-2.5-flash`），把 5 个回答 + 影片信息串成一段 200~350 字、以「今晚就它了。」收尾的叙事解读。
+## AI 解读（Agnes 优先 + Gemini 兜底）
 
+结果页「✦ 不良解读」按钮调用 `/api/interpret`（Vercel Serverless Function），由服务端带 key 调各家 `/chat/completions`，把 5 个回答 + 影片信息串成一段 200~350 字、以「今晚就它了。」收尾的叙事解读。
+
+**提供方与降级策略**（实现见 `api/_lib/core.js`，配置样例见 `.env.example`）：
+
+| 配置情况 | 实际行为 |
+|---|---|
+| 只配 Agnes | 只用 Agnes |
+| 只配 Gemini | 只用 Gemini |
+| 两者都配 | **先用 Agnes**；报错 / 超时 / 返回为空 → 自动用 Gemini 重试一遍 |
+| 都没配 / 都失败 | `/api/interpret` 返回 `502`，错误信息带上每家的具体原因 |
+
+- 优先级 = `AI_PROVIDERS` 的书写顺序（缺省 `agnes,gemini`）。缺 key 的提供方自动跳过，所以「只配哪个就用哪个」不需要额外配置。
+- Agnes：`AGNES_API_KEYS`（逗号分隔多 key 轮转，同提供方内分摊）/ `AGNES_MODEL`（默认 `agnes-2.5-flash`）。
+- Gemini：`GEMINI_API_KEY`（Google AI Studio 的 key）/ `GEMINI_MODEL`（默认 `gemini-2.5-flash`，**必须填 Gemini 真实模型名**）。走 Google 官方的 OpenAI 兼容端点，故复用同一套请求/解析逻辑。
+- 时间预算：单提供方 `AI_TIMEOUT_MS`（默认 15s）到点即换下一家；整体 `AI_BUDGET_MS`（默认 26s）必须小于 `vercel.json` 的 `maxDuration: 30`，且**前端 fetch 超时（45s）要大于它**，否则后端还在降级、前端已经断开。
 - ✅ **key 不进前端**：走服务端代理，key 配在 Vercel 环境变量，不进仓库、不暴露给用户。
-- 多 key 轮转：`AGNES_API_KEYS` 支持逗号分隔多个 key，失败自动换下一个；同时兼容 openai/deepseek/moonshot。
 - 缓存：`@vercel/kv` 可选，未配置环境变量时自动退回内存 Map，不影响功能。
-- 本地开发：复制 `.env.example` 为 `.env` 填入 key，再 `node dev-server.mjs`。
+- 本地开发：复制 `.env.example` 为 `.env` 填入 key，再 `node dev-server.mjs`。自检：`node scripts/check-ai.mjs`（用本地 mock 验证降级路径，不需要真 key）。
 - 前端已兜底：即便接口异常，也会回退展示已构造好的提示词，不会白屏。
 
 ### ⚠️ /api/interpret 的安全基线（勿删）

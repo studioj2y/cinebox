@@ -71,6 +71,9 @@ export default async function handler(req, res) {
     const result = await interpret({ movieId, title, answers, prompt });
     res.status(200).json(result);
   } catch (e) {
+    // 留日志：502 多为「所有提供方都不可用」，错误里已带各家原因（如 Agnes: HTTP 401；Gemini: 超时），
+    // 不记的话线上只能看到一句 502，无法定位是哪家、哪种失败。
+    console.error("[interpret] 失败:", e && e.message);
     res.status(502).json({ error: e.message || "interpret failed" });
   }
 }

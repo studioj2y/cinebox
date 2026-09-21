@@ -1,16 +1,39 @@
 // core.js — AI 解读服务端核心（与部署形态无关，Vercel 函数与本地 dev-server 共用）
-// 职责：多 key 轮转 + 多提供方故障转移 + 内存缓存 + 限流。前端不再持有任何 key。
+// 职责：多提供方**分层故障转移** + 多 key 轮转 + 缓存 + 限流。前端不再持有任何 key。
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
-// 提供方注册表：新增提供方只需在此加一项，并在 .env 配对应的 *_API_KEYS 即可
+/* ==================== 提供方注册表 ====================
+ * 新增提供方只需在此加一项，并在 .env 配对应 key。
+ *
+ * keys: 候选环境变量名，按顺序取**第一个非空**的。同时接受两种写法——
+ *       *_API_KEY（各家官方惯例的单数名，Gemini 即如此）与 *_API_KEYS（逗号分隔多 key 轮转）。
+ *       全部未配置时，统一回退到 API_KEYS（适用于聚合网关用一个 key 打通多家）。
+ * base: 返回 API 根地址（不含 path）；末尾斜杠自动去掉，避免拼出 //chat/completions。
+ */
+const stripSlash = (s) => String(s || "").replace(/\/+$/, "");
+
 const PROVIDER_DEFS = {
   agnes: {
     label: "Agnes",
     base: () => process.env.AGNES_BASE || "https://apihub.agnes-ai.com/v1",
     model: () => process.env.AGNES_MODEL || "agnes-2.5-flash",
     path: "/chat/completions",
+    keys: ["AGNES_API_KEYS", "AGNES_API_KEY"],
+    auth: (k) => "Bearer " + k,
+  },
+  gemini: {
+    /* Google 官方的 OpenAI 兼容层，可直接复用本文件的请求体/解析逻辑。
+     * ⚠️ base 必须带 `/openai` 后缀（少了它 404）；
+     * ⚠️ model 必须填 **Gemini 真实模型名**（如 gemini-2.5-flash），填 gpt-* 会 404 model not found；
+     * ⚠️ key 用 Google AI Studio（aistudio.google.com）的 API key，走 Bearer；
+     *    Vertex AI 的 service account 凭据不适用此端点。 */
+    label: "Gemini",
+    base: () => process.env.GEMINI_BASE || "https://generativelanguage.googleapis.com/v1beta/openai",
+    model: () => process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    path: "/chat/completions",
+    keys: ["GEMINI_API_KEYS", "GEMINI_API_KEY"],
     auth: (k) => "Bearer " + k,
   },
   openai: {
@@ -18,6 +41,7 @@ const PROVIDER_DEFS = {
     base: () => process.env.OPENAI_BASE || "https://api.openai.com/v1",
     model: () => process.env.OPENAI_MODEL || "gpt-4o-mini",
     path: "/chat/completions",
+    keys: ["OPENAI_API_KEYS", "OPENAI_API_KEY"],
     auth: (k) => "Bearer " + k,
   },
   deepseek: {
@@ -25,6 +49,7 @@ const PROVIDER_DEFS = {
     base: () => process.env.DEEPSEEK_BASE || "https://api.deepseek.com/v1",
     model: () => process.env.DEEPSEEK_MODEL || "deepseek-chat",
     path: "/chat/completions",
+    keys: ["DEEPSEEK_API_KEYS", "DEEPSEEK_API_KEY"],
     auth: (k) => "Bearer " + k,
   },
   moonshot: {
@@ -32,38 +57,118 @@ const PROVIDER_DEFS = {
     base: () => process.env.MOONSHOT_BASE || "https://api.moonshot.cn/v1",
     model: () => process.env.MOONSHOT_MODEL || "moonshot-v1-8k",
     path: "/chat/completions",
+    keys: ["MOONSHOT_API_KEYS", "MOONSHOT_API_KEY"],
     auth: (k) => "Bearer " + k,
   },
 };
 
-// 启用的提供方：env AI_PROVIDERS 逗号分隔；缺省仅 agnes
+/* 启用的提供方：env AI_PROVIDERS 逗号分隔，**顺序即优先级**——
+ * 靠前的先试，整层失败才降级到下一层。缺省 "agnes,gemini"：
+ *   · 两者都配 key → agnes 优先，gemini 兜底；
+ *   · 只配其中一个 → 另一个无 key 自动跳过，等于直接用配好的那个；
+ *   · 一个都没配 → 报错（见 buildTiers / interpret）。
+ * 想加 openai/deepseek/moonshot 做更多兜底层，把它写进 AI_PROVIDERS 并配好 key 即可。 */
+const DEFAULT_PROVIDERS = "agnes,gemini";
+
 function enabledProviders() {
-  const raw = (process.env.AI_PROVIDERS || "agnes")
+  const raw = (process.env.AI_PROVIDERS || DEFAULT_PROVIDERS)
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
   return raw.filter((p) => PROVIDER_DEFS[p]);
 }
 
-// 构造「端点」列表：每个提供方 × 其多个 key，作为轮转/故障转移的基本单元
-function buildEndpoints() {
-  const endpoints = [];
-  for (const name of enabledProviders()) {
-    const def = PROVIDER_DEFS[name];
-    const envKey = name === "agnes" ? "AGNES_API_KEYS" : name.toUpperCase() + "_API_KEYS";
-    const keysRaw = process.env[envKey] || process.env.API_KEYS || "";
-    const keys = keysRaw.split(/[,\s]+/).map((k) => k.trim()).filter(Boolean);
-    for (const key of keys) endpoints.push({ name, def, key });
+function readKeys(def) {
+  for (const name of def.keys || []) {
+    const raw = process.env[name];
+    if (raw && raw.trim()) {
+      const ks = raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
+      if (ks.length) return ks;
+    }
   }
-  return endpoints;
+  return (process.env.API_KEYS || "").split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
 }
 
-// 负载均衡游标：每次请求从下一个 key 开始，使多 key 真正分摊流量
-let cursor = 0;
+/* 构造「层级」：一个提供方 = 一层，层内是它的多个 key。
+ * 没配 key 的提供方直接跳过，所以「只配一个就用那个」无需额外判断。 */
+function buildTiers() {
+  const tiers = [];
+  for (const name of enabledProviders()) {
+    const def = PROVIDER_DEFS[name];
+    const keys = readKeys(def);
+    if (!keys.length) continue;
+    tiers.push({ name, def, keys });
+  }
+  return tiers;
+}
 
-// 缓存：优先 Vercel KV（跨实例共享，多个 key/提供方 & 高并发下避免重复调用），
-// 未配置 KV 时自动降级为内存 Map（实例内热，重启清空）。
-// 启用 KV：在 Vercel 创建 KV store 并 Link 本项目即可（会自动注入 KV_REST_API_URL / KV_REST_API_TOKEN 等）。
+/* ---------------- 超时与时间预算 ----------------
+ * 两个必须配合的硬约束：
+ *   ① vercel.json 里 api/interpret.js 的 maxDuration = 30s —— 超过会被平台掐断（504）；
+ *   ② 前端 fetch 超时（js/app.js）必须**大于**这里的总预算，否则后端还在降级、前端已 abort。
+ * 因此：单提供方超时 AI_TIMEOUT_MS（默认 15s，agnes 拖着不回就及时切 gemini），
+ *       整体预算 AI_BUDGET_MS（默认 26s，给 Vercel 的 30s 留 4s 余量）。
+ * 每次实际请求的超时 = min(单提供方超时, 剩余预算)；剩余不足 MIN_SLOT 就不再开新提供方。 */
+const PER_TIMEOUT = Math.max(1000, Number(process.env.AI_TIMEOUT_MS) || 15000);
+const BUDGET_MS = Math.max(2000, Number(process.env.AI_BUDGET_MS) || 26000);
+const MIN_SLOT = 1200;
+
+// 层内轮转游标：每次请求从下一个 key 开始，使同提供方的多 key 真正分摊流量
+const cursors = new Map();
+function nextStart(name, len) {
+  const s = (cursors.get(name) || 0) % len;
+  cursors.set(name, (s + 1) % len);
+  return s;
+}
+
+const SYSTEM_PROMPT =
+  "你是「不良少女放映组」的观影向导，懂电影也懂人心。用温暖、像朋友一样的语气写一段中文解读，可以带一点点不羁、漫不经心的酷劲儿——但别太用力，保持真诚自然。不要使用任何 markdown 格式。";
+
+const MIN_LEN = 18; // 低于此长度视为被截断/异常短
+
+/* 单次调用（一个提供方 + 一个 key）。任何异常都向上抛，由调用方决定降级。 */
+async function callOnce(def, apiKey, prompt, timeoutMs) {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const resp = await fetch(stripSlash(def.base()) + def.path, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { "Content-Type": "application/json", Authorization: def.auth(apiKey) },
+      body: JSON.stringify({
+        model: def.model(),
+        temperature: 0.8,
+        max_tokens: 900,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: prompt },
+        ],
+      }),
+    });
+    if (!resp.ok) throw new Error(`${def.label} HTTP ${resp.status}`);
+    let data;
+    try {
+      data = await resp.json();
+    } catch (e) {
+      throw new Error(`${def.label} 返回解析失败（疑似截断）`);
+    }
+    const t = ((data.choices && data.choices[0] && data.choices[0].message.content) || "").trim();
+    if (t.length < MIN_LEN) throw new Error(`${def.label} 返回过短或为空`);
+    return t;
+  } catch (e) {
+    if (e && e.name === "AbortError") {
+      const secs = (timeoutMs / 1000).toFixed(1).replace(/\.0$/, "");
+      throw new Error(`${def.label} 超时（${secs}s 无响应）`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+/* ---------------- 缓存（与提供方无关） ----------------
+ * 优先 Vercel KV（跨实例共享）；未配置 KV 时自动降级为内存 Map（实例内热，重启清空）。
+ * 启用 KV：在 Vercel 创建 KV store 并 Link 本项目即可。 */
 let kv = null;
 let kvTried = false;
 async function getKV() {
@@ -107,8 +212,7 @@ async function cacheSet(key, val) {
 /* ---------------- 限流 ----------------
  * /api/interpret 是公开端点，早期版本无任何防护：任何人循环 curl 即可消耗 API 额度，
  * 且缓存 key = md5(movieId+answers)，改一个答案就能绕过缓存。故在此加按 IP 的双窗口限流。
- * 存储优先 Vercel KV（跨实例共享，真正能挡住分布式刷量）；未配置 KV 时降级为内存计数
- * （仅挡单实例高频，仍远好过裸奔）。
+ * 存储优先 Vercel KV（跨实例共享，真正能挡住分布式刷量）；未配置 KV 时降级为内存计数。
  * 额度宽松度按真实使用设定：正常用户一次会话最多点几次「不良有话说」。 */
 const RATE_LIMITS = [
   { name: "min", window: 60, limit: 10 },        // 10 次 / 分钟
@@ -171,11 +275,19 @@ export function movieIdSet() {
   return _movieIds;
 }
 
-const SYSTEM_PROMPT =
-  "你是「不良少女放映组」的观影向导，懂电影也懂人心。用温暖、像朋友一样的语气写一段中文解读，可以带一点点不羁、漫不经心的酷劲儿——但别太用力，保持真诚自然。不要使用任何 markdown 格式。";
+/* 供调试/自检：当前生效的提供方与优先级（**不暴露 key**） */
+export function providerStatus() {
+  return enabledProviders().map((name) => {
+    const def = PROVIDER_DEFS[name];
+    const keys = readKeys(def);
+    return { name, label: def.label, model: def.model(), keys: keys.length, ready: keys.length > 0 };
+  });
+}
 
-const MIN_LEN = 18; // 低于此长度视为被截断/异常短
-
+/* ==================== 主流程 ====================
+ * 分层故障转移：按 AI_PROVIDERS 顺序逐层尝试，层内多 key 轮转。
+ * 任一次调用成功即返回；某层全败才降级到下一层；所有层都失败则抛出汇总错误。
+ * 返回值保留 provider（实际生效的提供方）与 fallback（是否由降级得来），便于排查与统计。 */
 export async function interpret({ movieId, title, answers, prompt }) {
   if (!prompt) throw new Error("缺少 prompt");
 
@@ -183,56 +295,49 @@ export async function interpret({ movieId, title, answers, prompt }) {
   const cached = await cacheGet(key);
   if (cached) return { text: cached, cached: true };
 
-  const endpoints = buildEndpoints();
-  if (!endpoints.length)
-    throw new Error("未配置任何 API key（请设置 AGNES_API_KEYS 等环境变量）");
-
-  // 轮转起点：每来一个请求就推进游标，分摊到不同 key
-  const start = cursor % endpoints.length;
-  cursor = (cursor + 1) % endpoints.length;
-
-  let lastErr = "";
-  // 从轮转起点开始，依次尝试各端点（多 key / 多提供方），任一成功即返回
-  for (let i = 0; i < endpoints.length; i++) {
-    const { name, def, key: apiKey } = endpoints[(start + i) % endpoints.length];
-    try {
-      const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 30000); // 30s 超时
-      const resp = await fetch(def.base() + def.path, {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json", Authorization: def.auth(apiKey) },
-        body: JSON.stringify({
-          model: def.model(),
-          temperature: 0.8,
-          max_tokens: 900,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: prompt },
-          ],
-        }),
-      });
-      clearTimeout(to);
-      if (!resp.ok) throw new Error(`${def.label} HTTP ${resp.status}`);
-      let data;
-      try {
-        data = await resp.json();
-      } catch (e) {
-        throw new Error(`${def.label} 返回解析失败（疑似截断）`);
-      }
-      let t = ((data.choices && data.choices[0] && data.choices[0].message.content) || "").trim();
-      if (t.length < MIN_LEN) throw new Error(`${def.label} 返回过短（疑似截断）`);
-      // 兜底：结尾必带「今晚就它了。」
-      if (!/今晚就它了[。\.！!]?$/.test(t.replace(/\s+$/, ""))) {
-        t = t.replace(/\s+$/, "") + "\n\n今晚就它了。";
-      }
-      if (memCache.size >= CACHE_MAX) memCache.delete(memCache.keys().next().value);
-      await cacheSet(key, t);
-      return { text: t, cached: false, provider: name };
-    } catch (e) {
-      lastErr = e.message;
-      continue; // 故障转移：尝试下一个 key / 提供方
-    }
+  const tiers = buildTiers();
+  if (!tiers.length) {
+    throw new Error("未配置任何 AI key（请设置 AGNES_API_KEYS 或 GEMINI_API_KEY）");
   }
-  throw new Error("所有 key/提供方均失败：" + lastErr);
+
+  const t0 = Date.now();
+  const failures = []; // 已宣告失败的提供方，用于汇总错误 + 判断是否发生降级
+
+  for (const tier of tiers) {
+    const start = nextStart(tier.name, tier.keys.length);
+    let tierErr = "";
+
+    for (let i = 0; i < tier.keys.length; i++) {
+      // 每次调用前重算剩余预算，确保 agnes 慢时不会把 gemini 的时间用光
+      const left = Math.min(PER_TIMEOUT, BUDGET_MS - (Date.now() - t0));
+      if (left < MIN_SLOT) {
+        tierErr = tierErr || "剩余时间预算不足";
+        break;
+      }
+      const apiKey = tier.keys[(start + i) % tier.keys.length];
+      try {
+        let t = await callOnce(tier.def, apiKey, prompt, left);
+        // 兜底：结尾必带「今晚就它了。」
+        if (!/今晚就它了[。\.！!]?$/.test(t.replace(/\s+$/, ""))) {
+          t = t.replace(/\s+$/, "") + "\n\n今晚就它了。";
+        }
+        await cacheSet(key, t);
+        const fallback = failures.length > 0;
+        if (fallback) {
+          console.warn(`[interpret] 降级到 ${tier.def.label} 成功；前序失败：${failures.join("；")}`);
+        }
+        return { text: t, cached: false, provider: tier.name, fallback };
+      } catch (e) {
+        tierErr = e.message; // 层内换下一个 key 继续试
+      }
+    }
+
+    // callOnce 抛出的消息已带提供方名（如「Agnes HTTP 500」），此处统一成「Agnes: HTTP 500」，避免重复
+    const detail = tierErr.startsWith(tier.def.label)
+      ? tierErr.slice(tier.def.label.length).replace(/^[：:\s]+/, "")
+      : tierErr;
+    failures.push(`${tier.def.label}: ${detail || "全部 key 失败"}`);
+  }
+
+  throw new Error("AI 服务暂不可用（" + failures.join("；") + "）");
 }
