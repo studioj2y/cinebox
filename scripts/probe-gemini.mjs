@@ -5,11 +5,13 @@
  *   · check-ai.mjs  —— 本地 mock，验**降级逻辑**，零外网零额度；
  *   · 本脚本        —— 打**真实 Google 端点**，验“配了却出不来结果”的**根因**。
  *
- * 它会依次做完这 4 件事，并把 HTTP 状态与原样响应打出来：
+ * 它会依次做完这 6 件事，并把 HTTP 状态与原样响应打出来：
  *   ① 列出该 key 在 OpenAI 兼容层上**可用**的模型 ID  → 直接回答“模型名对不对”
  *   ② 完全复刻 core.js 的请求体                        → 直接回答“应用这一发能不能成”
  *   ③ 排除 max_tokens 干扰（去掉 / 放大 / 换成 max_completion_tokens）
  *   ④ 排除 thinking 吃光 token：看 finish_reason 与 usage
+ *   ⑤ reasoning_effort（OpenAI 标准字段）是否被接受   → core.js 默认压思考走这条
+ *   ⑥ extra_body.google.thinking_config（Gemini 原生字段）能否被透传 —— 与 ⑤ 互斥
  *
  * 用法（在项目根目录）：
  *   GEMINI_API_KEY=AIza... node scripts/probe-gemini.mjs
@@ -114,11 +116,11 @@ if (list.raw) {
   } catch (e) { /* 已在 call 里打印 */ }
 }
 
-console.log("② 复刻 core.js 的请求体（temperature 0.8 + max_tokens 900）");
+console.log("② 复刻 core.js 的请求体（temperature 0.8 + max_tokens 2048）");
 await call("应用当前形态", {
   model: MODEL,
   temperature: 0.8,
-  max_tokens: 900,
+  max_tokens: 2048,
   messages: [{ role: "system", content: sys }, { role: "user", content: user }],
 });
 
@@ -141,12 +143,26 @@ await call("用 max_completion_tokens 代替", {
   messages: [{ role: "system", content: sys }, { role: "user", content: user }],
 });
 
-console.log("④ 限制思考预算（reasoning_effort: low）");
-await call("reasoning_effort=low + max_tokens 900", {
+/* ⑤⑥ 兼容层压思考的**两条互斥路径**，分别打一次，用来确认哪条在你这台 key 上被接受：
+ *   ① reasoning_effort                     —— OpenAI 标准字段（core.js 默认走这条）
+ *   ② extra_body.google.thinking_config    —— Gemini 原生字段（文档里 thinking_level 那套经兼容层透传）
+ * 官方明确二者不能同时用。若 ② 报 400，说明该兼容层不吃 extra_body 形状 ⇒ 用 ① 即可。
+ * ⚠️ 文档里 types.ThinkingConfig(thinking_level=...) 是**原生 SDK**（另一个端点）的写法，此处不适用。 */
+console.log("⑤ reasoning_effort 路径（OpenAI 标准字段）");
+await call("reasoning_effort=low + max_tokens 2048", {
   model: MODEL,
   temperature: 0.8,
-  max_tokens: 900,
+  max_tokens: 2048,
   reasoning_effort: "low",
+  messages: [{ role: "system", content: sys }, { role: "user", content: user }],
+});
+
+console.log("⑥ thinking_config 路径（Gemini 原生字段，经兼容层透传）");
+await call("extra_body.google.thinking_config.thinking_level=low", {
+  model: MODEL,
+  temperature: 0.8,
+  max_tokens: 2048,
+  extra_body: { google: { thinking_config: { thinking_level: "low", include_thoughts: true } } },
   messages: [{ role: "system", content: sys }, { role: "user", content: user }],
 });
 
@@ -155,3 +171,5 @@ console.log("· ① 报 401/403  → key 本身无效或没启用（去 AI Studi
 console.log("· ① 模型不在列表内 → GEMINI_MODEL 填的模型该兼容层不提供，换一个列表里的名字");
 console.log("· ② 失败而 ③ 某一步成功 → 就是那个参数的问题，按成功的那组改 core.js");
 console.log("· ② 成功但 content 长度为 0/null → 思考内容吃光了 max_tokens（③ 的 4096 那步应能救回）");
+console.log("· ⑤ 与 ⑥ 都成功 → 该端点两条压思考路径都可用，core.js 里任选一条（默认就是 ⑤）");
+console.log("· ⑥ 报 400 而 ⑤ 成功 → 该兼容层不接受 extra_body 形状，用 GEMINI_REASONING_EFFORT 即可");

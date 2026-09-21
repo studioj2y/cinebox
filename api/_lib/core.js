@@ -14,6 +14,20 @@ import path from "path";
  */
 const stripSlash = (s) => String(s || "").replace(/\/+$/, "");
 
+/* 配置类告警只打一次：线上日志按量计费，且同一错误每次请求都刷会淹没真正的故障。
+ * （值与取值来源见下方 PROVIDER_DEFS.gemini.extra 的注释） */
+const _warned = new Set();
+const warnOnce = (msg) => {
+  if (_warned.has(msg)) return;
+  _warned.add(msg);
+  console.warn("[core] " + msg);
+};
+
+// Gemini 兼容层的 reasoning_effort 合法值；none 仅能关闭 2.5 系（非 Pro）的思考。
+const REASONING_EFFORTS = new Set(["minimal", "low", "medium", "high", "none"]);
+// Gemini 原生 thinking_config.thinking_level 合法值（没有 none —— 3.x 关不掉思考）。
+const THINKING_LEVELS = new Set(["minimal", "low", "medium", "high"]);
+
 const PROVIDER_DEFS = {
   agnes: {
     label: "Agnes",
@@ -35,12 +49,56 @@ const PROVIDER_DEFS = {
     path: "/chat/completions",
     keys: ["GEMINI_API_KEYS", "GEMINI_API_KEY"],
     auth: (k) => "Bearer " + k,
-    /* Gemini 3.x 是**思考模型，思考无法关闭**，而思考 token 与正文共享 max_tokens：
-     * 若预算被思考吃光，content 会是空串/极短 ⇒ 命中下面的 MIN_LEN 判空。
-     * 需要压思考时把 GEMINI_REASONING_EFFORT 设成 minimal / low（缺省不传，用模型默认）。 */
-    extra: () => {
-      const e = (process.env.GEMINI_REASONING_EFFORT || "").trim().toLowerCase();
-      return e ? { reasoning_effort: e } : {};
+    /* —— 压思考（可选）：兼容层有两条路，**官方明确二者互斥**，同时用会 400 ——
+     *  ① reasoning_effort —— **本文件采用的默认路径**。
+     *       OpenAI 标准字段，作为顶层 JSON 字段发给 /v1beta/openai/chat/completions。
+     *       合法值 minimal | low | medium | high；none 只能关 2.5 系（2.5 Pro 与 3.x 关不掉）。
+     *       官方映射：minimal → 3.1Pro:low  3.1Flash-Lite:minimal  3Flash:minimal  2.5:1024
+     *                 low     → 3.1Pro:low  3.1Flash-Lite:low      3Flash:low      2.5:1024
+     *                 medium  → medium / 2.5:8192      high → high / 2.5:24576
+     *  ② extra_body.google.thinking_config.{thinking_level, include_thoughts}
+     *       Gemini 原生字段，经兼容层透传（Google 官方 REST 示例即此形状）。
+     *       thinking_level 与 ① 同构；额外可以用 include_thoughts 让模型回思考摘要，便于排障。
+     *
+     * ⚠️ 文档里 `types.ThinkingConfig(thinking_level="high")` 属于**原生 google-genai SDK**
+     *    （打到 /v1beta/models/{model}:generateContent，鉴权用 x-goog-api-key），
+     *    与本文件调用的**兼容层不是同一套参数**，两者的字段名与位置都不同、不能混填。
+     *    在本文件（兼容层）里想要 thinking_level 那种写法，就得走上面的 ②。
+     *
+     * 为什么需要它：Gemini 3.x 是思考模型且**思考无法关闭**，思考 token 与正文共享 max_tokens；
+     * 预算被思考吃光 ⇒ content 为空/极短 ⇒ 命中下面的 MIN_LEN 判空。
+     * 缺省两条路都不传，用模型默认思考级别（本参数永不发给 Agnes 等其它提供方）。 */
+    extra: (def) => {
+      const eff = (process.env.GEMINI_REASONING_EFFORT || "").trim().toLowerCase();
+      const lvl = (process.env.GEMINI_THINKING_LEVEL || "").trim().toLowerCase();
+      const model = def.model();
+
+      if (eff && lvl) {
+        warnOnce("GEMINI_REASONING_EFFORT 与 GEMINI_THINKING_LEVEL 互斥（官方规定不能同时用），已只用 GEMINI_REASONING_EFFORT");
+      }
+      if (eff) {
+        if (!REASONING_EFFORTS.has(eff)) {
+          warnOnce(`GEMINI_REASONING_EFFORT="${eff}" 不是合法值（可选 ${[...REASONING_EFFORTS].join(" / ")}），已忽略`);
+          return {};
+        }
+        if (eff === "none" && !/^gemini-2\.5-(flash|flash-lite)/.test(model)) {
+          warnOnce(`reasoning_effort=none 只能关闭 Gemini 2.5（非 Pro）的思考，当前模型 ${model} 关不掉；已忽略以免被 Google 拒绝`);
+          return {};
+        }
+        return { reasoning_effort: eff };
+      }
+      if (lvl) {
+        if (!THINKING_LEVELS.has(lvl)) {
+          warnOnce(`GEMINI_THINKING_LEVEL="${lvl}" 不是合法值（可选 ${[...THINKING_LEVELS].join(" / ")}），已忽略`);
+          return {};
+        }
+        const cfg = { thinking_level: lvl };
+        if (/^(1|true|yes)$/.test((process.env.GEMINI_INCLUDE_THOUGHTS || "").trim().toLowerCase())) {
+          cfg.include_thoughts = true;
+        }
+        return { extra_body: { google: { thinking_config: cfg } } };
+      }
+      return {};
     },
   },
   openai: {
@@ -164,7 +222,7 @@ async function callOnce(def, apiKey, prompt, timeoutMs) {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: prompt },
         ],
-        ...(def.extra ? def.extra() : {}),
+        ...(def.extra ? def.extra(def) : {}),
       }),
     });
     if (!resp.ok) throw new Error(`${def.label} HTTP ${resp.status}`);

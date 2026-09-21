@@ -337,6 +337,68 @@ console.log("CINEBOX AI 降级自检（全部走本地 mock，无外部请求）
   check("单家超时 ≥ 20s（给思考模型留余量）", perTimeout >= 20000, String(perTimeout));
 }
 
+/* ---- 16. Gemini 思考参数：取值白名单 / none 只对 2.5 / 两条路互斥 ----
+ * 背景：兼容层压思考有 reasoning_effort（OpenAI 字段）与
+ * extra_body.google.thinking_config.thinking_level（Gemini 原生字段）两条互斥路径。
+ * 填错一个字符若原样发出，线上只会看到一个没头绪的 400 —— 故在此钉死本地拦截。
+ * （文档里 types.ThinkingConfig(thinking_level=...) 属原生 SDK，与兼容层不是一套，见 core.js 注释） */
+{
+  console.log("\n[16] Gemini 思考参数（reasoning_effort / GEMINI_THINKING_LEVEL）");
+  state.agnes = "http500"; // 让 Agnes 失败，好把 Gemini 走到
+  state.gemini = "ok";
+  const envBoth = { AGNES_API_KEYS: "a1", AGNES_BASE: BASE + "/agnes" };
+  const gKey = { GEMINI_API_KEY: "g1", GEMINI_BASE: BASE + "/gemini" };
+
+  // 16a. 非法取值应被本地拦掉，而不是原样发给 Google
+  {
+    const { interpret } = await loadCore({ ...envBoth, ...gKey, GEMINI_REASONING_EFFORT: "loww" });
+    await interpret({ ...REQ, movieId: "test-16a" });
+    check("非法 reasoning_effort 被忽略（不原样外发）", lastReq.gemini && lastReq.gemini.reasoning_effort === undefined, JSON.stringify(lastReq.gemini && lastReq.gemini.reasoning_effort));
+  }
+
+  // 16b. none 对 Gemini 3 无效（3.x 关不掉思考，传了会被 Google 拒）
+  {
+    const { interpret } = await loadCore({ ...envBoth, ...gKey, GEMINI_MODEL: "gemini-3.1-flash-lite", GEMINI_REASONING_EFFORT: "none" });
+    await interpret({ ...REQ, movieId: "test-16b" });
+    check("reasoning_effort=none 对 Gemini 3 被拦下", lastReq.gemini && lastReq.gemini.reasoning_effort === undefined, JSON.stringify(lastReq.gemini && lastReq.gemini.reasoning_effort));
+  }
+
+  // 16c. none 对 2.5-flash 合法，应放行
+  {
+    const { interpret } = await loadCore({ ...envBoth, ...gKey, GEMINI_MODEL: "gemini-2.5-flash", GEMINI_REASONING_EFFORT: "none" });
+    await interpret({ ...REQ, movieId: "test-16c" });
+    check("reasoning_effort=none 对 2.5-flash 放行", lastReq.gemini && lastReq.gemini.reasoning_effort === "none", JSON.stringify(lastReq.gemini && lastReq.gemini.reasoning_effort));
+  }
+
+  // 16d. 走 Gemini 原生 thinking_config 分支（文档里 thinking_level 那套）
+  {
+    const { interpret } = await loadCore({ ...envBoth, ...gKey, GEMINI_THINKING_LEVEL: "low", GEMINI_INCLUDE_THOUGHTS: "true" });
+    await interpret({ ...REQ, movieId: "test-16d" });
+    const g = lastReq.gemini || {};
+    const tc = g.extra_body && g.extra_body.google && g.extra_body.google.thinking_config;
+    check("GEMINI_THINKING_LEVEL 生成 extra_body.google.thinking_config", !!tc, JSON.stringify(g.extra_body));
+    check("thinking_level=low 且 include_thoughts 已开", !!tc && tc.thinking_level === "low" && tc.include_thoughts === true, JSON.stringify(tc));
+    check("此时不发 reasoning_effort（互斥）", g.reasoning_effort === undefined, JSON.stringify(g.reasoning_effort));
+  }
+
+  // 16e. 两条路同时配置 → 以 reasoning_effort 为准，且不叠加
+  {
+    const { interpret } = await loadCore({ ...envBoth, ...gKey, GEMINI_REASONING_EFFORT: "medium", GEMINI_THINKING_LEVEL: "high" });
+    await interpret({ ...REQ, movieId: "test-16e" });
+    const g = lastReq.gemini || {};
+    check("互斥时只用 reasoning_effort，不带 extra_body", g.reasoning_effort === "medium" && g.extra_body === undefined, JSON.stringify({ effort: g.reasoning_effort, extra_body: g.extra_body }));
+  }
+
+  // 16f. 非法 thinking_level 同样本地拦掉
+  {
+    const { interpret } = await loadCore({ ...envBoth, ...gKey, GEMINI_THINKING_LEVEL: "extreme" });
+    await interpret({ ...REQ, movieId: "test-16f" });
+    check("非法 thinking_level 被忽略", lastReq.gemini && lastReq.gemini.extra_body === undefined, JSON.stringify(lastReq.gemini && lastReq.gemini.extra_body));
+  }
+
+  state.agnes = "ok";
+}
+
 console.log(`\n${failCount === 0 ? "\x1b[32m" : "\x1b[31m"}结果：${pass} 通过 / ${failCount} 失败\x1b[0m`);
 server.closeAllConnections?.();
 server.close();
