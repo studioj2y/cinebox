@@ -9,7 +9,7 @@ import path from "path";
  *
  * keys: 候选环境变量名，按顺序取**第一个非空**的。同时接受两种写法——
  *       *_API_KEY（各家官方惯例的单数名，Gemini 即如此）与 *_API_KEYS（逗号分隔多 key 轮转）。
- *       全部未配置时，统一回退到 API_KEYS（适用于聚合网关用一个 key 打通多家）。
+ *       全部未配置时，**仅第一层**可回退到 API_KEYS（适用于聚合网关用一个 key 打通多家）。
  * base: 返回 API 根地址（不含 path）；末尾斜杠自动去掉，避免拼出 //chat/completions。
  */
 const stripSlash = (s) => String(s || "").replace(/\/+$/, "");
@@ -78,7 +78,13 @@ function enabledProviders() {
   return raw.filter((p) => PROVIDER_DEFS[p]);
 }
 
-function readKeys(def) {
+/* allowGlobalFallback 只给**第一层**（最高优先级）开——它才是"你指向聚合网关的那个提供方"。
+ * 为什么不能对所有层开放：那会造出一个**假兜底**。假设只配了 API_KEYS（Agnes 网关的 key），
+ * 且 AI_PROVIDERS 是缺省的 agnes,gemini，那么 Gemini 层也会读到同一个 key 而"就绪"，
+ * 接着拿 Agnes 的 key 去请求 Google 端点，必然 401。表现是：降级路径看起来存在、
+ * providerStatus 也显示 ready，实际从没成功过一次 —— 比直接报"没配 key"更难查。
+ * 真要用一个 key 打通多家，把同一个值同时填进各家的 *_API_KEY 即可（显式、无歧义）。 */
+function readKeys(def, allowGlobalFallback) {
   for (const name of def.keys || []) {
     const raw = process.env[name];
     if (raw && raw.trim()) {
@@ -86,6 +92,7 @@ function readKeys(def) {
       if (ks.length) return ks;
     }
   }
+  if (!allowGlobalFallback) return [];
   return (process.env.API_KEYS || "").split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
 }
 
@@ -93,12 +100,12 @@ function readKeys(def) {
  * 没配 key 的提供方直接跳过，所以「只配一个就用那个」无需额外判断。 */
 function buildTiers() {
   const tiers = [];
-  for (const name of enabledProviders()) {
+  enabledProviders().forEach((name, i) => {
     const def = PROVIDER_DEFS[name];
-    const keys = readKeys(def);
-    if (!keys.length) continue;
+    const keys = readKeys(def, i === 0);
+    if (!keys.length) return;
     tiers.push({ name, def, keys });
-  }
+  });
   return tiers;
 }
 
@@ -277,9 +284,9 @@ export function movieIdSet() {
 
 /* 供调试/自检：当前生效的提供方与优先级（**不暴露 key**） */
 export function providerStatus() {
-  return enabledProviders().map((name) => {
+  return enabledProviders().map((name, i) => {
     const def = PROVIDER_DEFS[name];
-    const keys = readKeys(def);
+    const keys = readKeys(def, i === 0);
     return { name, label: def.label, model: def.model(), keys: keys.length, ready: keys.length > 0 };
   });
 }

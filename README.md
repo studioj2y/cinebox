@@ -75,6 +75,7 @@ movie-mood/
 | 都没配 / 都失败 | `/api/interpret` 返回 `502`，错误信息带上每家的具体原因 |
 
 - 优先级 = `AI_PROVIDERS` 的书写顺序（缺省 `agnes,gemini`）。缺 key 的提供方自动跳过，所以「只配哪个就用哪个」不需要额外配置。
+- ⚠️ 全局变量 `API_KEYS` 只在某家没配自己的 key 时给**第一层**兜底（聚合网关场景）；**第二层不会继承**它，以免出现「只配了一张 Agnes 的 key，Gemini 层却显示 ready」的假兜底。本项目用不到它，Vercel 里若有这个变量建议删掉。
 - Agnes：`AGNES_API_KEYS`（逗号分隔多 key 轮转，同提供方内分摊）/ `AGNES_MODEL`（默认 `agnes-2.5-flash`）。
 - Gemini：`GEMINI_API_KEY`（Google AI Studio 的 key）/ `GEMINI_MODEL`（默认 `gemini-2.5-flash`，**必须填 Gemini 真实模型名**）。走 Google 官方的 OpenAI 兼容端点，故复用同一套请求/解析逻辑。
 - 时间预算：单提供方 `AI_TIMEOUT_MS`（默认 15s）到点即换下一家；整体 `AI_BUDGET_MS`（默认 26s）必须小于 `vercel.json` 的 `maxDuration: 30`，且**前端 fetch 超时（45s）要大于它**，否则后端还在降级、前端已经断开。

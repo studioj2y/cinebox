@@ -267,6 +267,29 @@ console.log("CINEBOX AI 降级自检（全部走本地 mock，无外部请求）
   check("未配 key 的 Gemini 标记为 not ready", stc.find((s) => s.name === "gemini").ready === false, JSON.stringify(stc));
 }
 
+/* ---- 13. 全局 API_KEYS 只回退给第一层，不得造成「假兜底」 ---- */
+{
+  console.log("\n[13] 全局 API_KEYS 只作用于第一层（防止 Gemini 层假装就绪）");
+  state.agnes = "ok";
+  state.gemini = "ok";
+  const a = await loadCore({ API_KEYS: "hub-key", AGNES_BASE: BASE + "/agnes", GEMINI_BASE: BASE + "/gemini" });
+  const st = a.providerStatus();
+  check("第一层 agnes 继承全局 API_KEYS → ready", st.find((s) => s.name === "agnes").ready === true, JSON.stringify(st));
+  check("第二层 gemini **不**继承全局 API_KEYS → not ready", st.find((s) => s.name === "gemini").ready === false, JSON.stringify(st));
+
+  // 让 agnes 挂掉：既然 gemini 层没 key，报错里就不该出现 Gemini
+  state.agnes = "http500";
+  const b = await loadCore({ API_KEYS: "hub-key", AGNES_BASE: BASE + "/agnes", GEMINI_BASE: BASE + "/gemini" });
+  let msg = "";
+  try {
+    await b.interpret({ ...REQ, movieId: "test-13" });
+  } catch (e) {
+    msg = e.message;
+  }
+  check("错误只归因 Agnes，不出现假 Gemini 失败", /Agnes: HTTP 500/.test(msg) && !/Gemini/.test(msg), msg);
+  state.agnes = "ok";
+}
+
 console.log(`\n${failCount === 0 ? "\x1b[32m" : "\x1b[31m"}结果：${pass} 通过 / ${failCount} 失败\x1b[0m`);
 server.closeAllConnections?.();
 server.close();
