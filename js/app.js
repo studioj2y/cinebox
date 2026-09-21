@@ -90,12 +90,13 @@
   /* ---------------- 答题 ---------------- */
   const QUIZ_N = 5;
   /* 题目分类的展示名：category 是内部分类（粒度/隐喻/阶段等直接外露会让用户困惑），
-   * 这里映射成用户看得懂的短标签，仅用于界面显示，不影响任何匹配逻辑。 */
+   * 这里映射成用户看得懂的短标签，仅用于界面显示，不影响任何匹配逻辑。
+   * 写成口语而非机构化的字段名。「想被怎样」「强度」这类读起来像在填表。 */
   const CAT_LABEL = {
-    心情: "此刻心情", 体验: "想被怎样", 目的: "想要什么", 陪伴: "和谁一起",
-    偏好: "口味", 题材: "类型", 精力: "电量", 性格: "性格",
-    阶段: "近况", 粒度: "强度", 隐喻: "打个比方", 时间: "时段",
-    情怀: "新旧", 夜生活: "深夜",
+    心情: "此刻心情", 体验: "想看点啥", 目的: "图什么", 陪伴: "跟谁看",
+    偏好: "口味", 题材: "类型", 精力: "还剩多少电", 性格: "你的样子",
+    阶段: "最近怎样", 粒度: "几分", 隐喻: "打个比方", 时间: "这会儿",
+    情怀: "新旧", 夜生活: "深夜场",
   };
   let quizQs = [];
   let answers = [];
@@ -204,7 +205,7 @@
     if (quizLocked) return; // 防重复点击/穿透，避免跳题或重来
     quizLocked = true;
     answers.push(opt);
-    const reply = opt.reply || "好，记下了~";
+    const reply = opt.reply || "嗯，记下了。";
 
     // 先解除入场动画（cardIn 的 fill-mode:both 会锁定 opacity:1，覆盖 dissolve 的过渡目标），
     // 否则问题卡不会消散。强制重排后再加 .dissolve，让过渡从可见态平滑淡出
@@ -249,13 +250,13 @@
   }
   function renderSummary() {
     if (ghostLayerEl) ghostLayerEl.innerHTML = ""; // 清掉最后一题残留的「幽灵」回复
-    const replies = answers.map((a) => a.reply || "好，记下了~").filter(Boolean);
+    const replies = answers.map((a) => a.reply || "嗯，记下了。").filter(Boolean);
     quizCardEl.innerHTML =
       '<div class="summary">' +
-        '<div class="summary-kicker">你刚才说——</div>' +
+        '<div class="summary-kicker">你刚才说：</div>' +
         '<div class="summary-replies">' + replies.map((r) => '<span class="sr">' + r + '</span>').join("") + '</div>' +
-        '<p class="summary-line">聊完啦。现在，让一部电影<br>替今晚收个尾。</p>' +
-        '<button id="revealBtn" class="reveal-btn">揭晓今晚的电影 →</button>' +
+        '<p class="summary-line">聊完了。<br>今晚这片子，我挑好了。</p>' +
+        '<button id="revealBtn" class="reveal-btn">看看今晚是哪部 →</button>' +
       '</div>';
     quizCardEl.classList.remove("dissolve");
     void quizCardEl.offsetWidth;
@@ -274,7 +275,7 @@
     const pick = window.Match.pickOne(ranked, { tempFactor: 0.05 });
     current = pick ? pick.m : null;
     if (!current) {
-      alert("今晚的片库似乎空了，刷新一下页面再试吧。");
+      alert("片库好像空了，刷新一下再试。");
       return;
     }
     renderResult();
@@ -379,7 +380,7 @@
     pre.classList.remove("typing");
     requestAnimationFrame(() => pre.classList.add("show"));
     pre.classList.add("loading");
-    pre.textContent = "正在探究你的内心，请稍候…";
+    pre.textContent = "让我想一下，稍等。";
     // 强制把画面拉到最下，确保解读框（在内容下方）立即可见
     requestAnimationFrame(() => { pre.scrollIntoView({ behavior: "smooth", block: "end" }); scrollResultBottom(); });
 
@@ -440,10 +441,10 @@
     if (!text) {
       // 空 / 全部失败：温柔话术，提示可再次点击重新生成
       pre.classList.remove("loading", "typing");
-      /* 界面文案对用户保持温柔，但把**真实原因**打到控制台 —— 否则线上排障只剩
+      /* 界面文案对用户保持温柔，但把**真实原因**打到控制台，否则线上排障只剩
        * 一句「没接住」，看不出是超时、401 还是返回为空。 */
       console.error("[interpret] 解读失败，原因：", lastErr || "(无错误信息)");
-      // 失败多因服务端限流/超时，与用户无关——文案不能变成对用户的指责
+      // 失败多因服务端限流/超时，与用户无关；文案不能变成对用户的指责
       pre.textContent = "刚才没接住，怪我。\n再点一次「✦ 不良有话说」，我重新说。";
       aiLoading = false;
       pinBottom();
@@ -501,7 +502,7 @@
 
   /* html2canvas 有 194KB，但只有点「生成海报」这一条路径用得到。
    * 原先在 index.html 里以 <script> 同步引入，每个访客首屏都要为它付 194KB，
-   * 而真正会点生成海报的是少数人——改为点击时再注入。 */
+   * 而真正会点生成海报的是少数人，改为点击时再注入。 */
   let _h2cPromise = null;
   function loadHtml2Canvas() {
     if (window.html2canvas) return Promise.resolve(window.html2canvas);
@@ -526,7 +527,7 @@
     const btn = $("#posterBtn");
     if (btn.disabled) return;
     const m = current;
-    if (!m) { alert("先答完那几道题，才能生成你的专属海报。"); return; }
+    if (!m) { alert("得先答完题，才有你的海报。"); return; }
     const W = window.Match.aggregate(answers);
     const rating = window.Match.ratingOf(m) ? "TMDB ★ " + window.Match.ratingOf(m) : "";
     const tags = window.Match.topTags(m, W, 5).map((t) => "#" + t).join("  ");
@@ -550,7 +551,7 @@
           <span style="font:700 15px/1 system-ui;letter-spacing:2px;color:#ff7eb6;">CINE<b style="color:#ffd1e6;">BOX</b></span>
           <span style="font:14px system-ui;color:#c9a9d6;">· 不良陪你选电影</span>
         </div>
-        <div style="margin-top:15px;font:600 21px/1.3 system-ui;color:#ffffff;">今晚为你选出</div>
+        <div style="margin-top:15px;font:600 21px/1.3 system-ui;color:#ffffff;">今晚这部</div>
       </div>
       <div style="padding:10px 26px 14px;">${qa}</div>
       <div style="display:flex;justify-content:center;padding:16px 26px 8px;background:linear-gradient(180deg,#180d24,#140b1c);">
@@ -569,11 +570,11 @@
       <div style="display:flex;justify-content:center;padding:20px 22px 8px;">
         <div style="text-align:center;margin:0 15px;">
           <img src="images/qrcode.jpg" style="width:130px;height:130px;border-radius:10px;background:#fff;padding:6px;box-sizing:border-box;" />
-          <div style="font:13px/1.45 system-ui;color:#ffb6d4;margin-top:8px;">扫码关注 <b style="color:#ff5e9c;">不良少女放映组</b><br/>陪你一起看电影</div>
+          <div style="font:13px/1.45 system-ui;color:#ffb6d4;margin-top:8px;">扫码关注 <b style="color:#ff5e9c;">不良少女放映组</b><br/>下次挑片还找我</div>
         </div>
         <div style="text-align:center;margin:0 15px;">
           <img src="images/qrcode-domain.png" style="width:130px;height:130px;border-radius:10px;background:#fff;padding:6px;box-sizing:border-box;" />
-          <div style="font:13px/1.45 system-ui;color:#b6d4ff;margin-top:8px;">我也来挑一部 <b style="color:#ff5e9c;">不良陪你选电影</b><br/>生成我的专属海报</div>
+          <div style="font:13px/1.45 system-ui;color:#b6d4ff;margin-top:8px;">我也要挑一部 <b style="color:#ff5e9c;">不良陪你选电影</b><br/>生成我的专属海报</div>
         </div>
       </div>
       <div style="text-align:center;font:12px system-ui;color:#8a6f99;padding:12px 0 20px;">CINEBOX · 不良少女放映组</div>
@@ -598,7 +599,7 @@
     // 点开后立刻在最下方显示「正在生成」提示
     area.hidden = false;
     statusEl.hidden = false;
-    statusEl.textContent = "正在为您生成海报，请稍候…";
+    statusEl.textContent = "正在生成海报，稍等…";
     statusEl.className = "poster-status loading";
     imgEl.hidden = true;
     area.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -620,12 +621,12 @@
       const url = canvas.toDataURL("image/png");
       imgEl.src = url;
       imgEl.hidden = false;
-      statusEl.textContent = "已完成，可长按保存或分享";
+      statusEl.textContent = "好了，长按保存或分享";
       statusEl.className = "poster-status done";
       area.scrollIntoView({ behavior: "smooth", block: "end" });
       btn.textContent = "📸 重新生成海报";
     }).catch((e) => {
-      statusEl.textContent = "海报没能生成出来，再点一次试试（" + (e && e.message ? e.message : e) + "）";
+      statusEl.textContent = "没生成出来，再点一次试试（" + (e && e.message ? e.message : e) + "）";
       statusEl.className = "poster-status error";
     }).finally(() => {
       root.remove();

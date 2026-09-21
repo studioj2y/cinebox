@@ -52,6 +52,13 @@ def extract_labelmap(text):
     return set(re.findall(r'(\S+?):\s*"', m.group(1)))
 
 
+# 场景标签：只出现在问卷 weights 里，不在任何电影的 tags 上。
+# match.js 的 topTags() 遍历的是 movie.tags 的键，所以这些标签
+# 永远不会进入 buildReason，labelMap 里**不需要**它们的文案。
+# 不排除的话每次都会报 6 个"缺口"，诱导人去补一批用不上的文案。
+SCENE_LABELS = {"一个人看", "和朋友", "和伴侣", "周末", "深夜", "通勤"}
+
+
 def main():
     q = read(QUESTIONS)
     mv = read(MOVIES)
@@ -61,7 +68,7 @@ def main():
     movie_tags = extract_movie_tags(mv)
     label = extract_labelmap(mt)
 
-    trig_missing = sorted(triggered - label)
+    trig_missing = sorted((triggered - label) - SCENE_LABELS)
     movie_missing = sorted(movie_tags - label)
     movie_only_missing = [t for t in movie_missing if t not in triggered]
 
@@ -70,7 +77,7 @@ def main():
     print("labelMap 覆盖检查")
     print(bar)
     print(f"labelMap 条目数 : {len(label)}")
-    print(f"问卷触发标签数 : {len(triggered)}")
+    print(f"问卷触发标签数 : {len(triggered)}（其中场景标签 {len(triggered & SCENE_LABELS)} 个，无需文案）")
     print(f"电影标签总数   : {len(movie_tags)}")
     print()
     print(f"[优先级高] 会触发但缺文案: {len(trig_missing)} 个")

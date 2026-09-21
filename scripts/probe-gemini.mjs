@@ -55,7 +55,7 @@ console.log(`model    : ${MODEL}`);
 console.log(`key      : ${mask(KEY)}`);
 console.log("（仅显示前后几位，避免 key 进日志/截图）\n");
 
-const sys = "你是「不良少女放映组」的观影向导，懂电影也懂人心。用温暖、像朋友一样的语气写一段中文解读。不要使用任何 markdown 格式。";
+const sys = "你是「不良少女放映组」的主理人，替人挑片很多年。说话短、准、不哄人。不要使用任何 markdown 格式。";
 const user = "请用一句话（30 字以内）说说今晚适合看什么类型的电影。";
 
 async function call(label, body, { timeoutMs = 45000, method = "POST", url = BASE + "/chat/completions" } = {}) {
